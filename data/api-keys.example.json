@@ -1,0 +1,11 @@
+{
+  "ALPHA_VANTAGE_API_KEY": "YOUR_ALPHA_VANTAGE_KEY_HERE",
+  "FINNHUB_API_KEY": "YOUR_FINNHUB_KEY_HERE",
+  "FMP_API_KEY": "YOUR_FMP_KEY_HERE",
+  "description": {
+    "ALPHA_VANTAGE_API_KEY": "Get your free API key from: https://www.alphavantage.co/support/#api-key",
+    "FINNHUB_API_KEY": "Get your free API key from: https://finnhub.io/register",
+    "FMP_API_KEY": "Get your free API key from: https://site.financialmodelingprep.com/developer/docs"
+  },
+  "notes": "Copy this file to api-keys.json and replace the placeholder values with your actual API keys."
+}

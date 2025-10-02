@@ -1,0 +1,39 @@
+HL SIPP Income Drawdown, , , ,
+Client Name:,Test Portfolio EU/UK, , ,
+Client Number:, TEST123, , ,
+Spreadsheet created at,01-10-2025 12:00, , ,
+
+Stock value:,"150,000.00", , ,
+Total cash:,"15,000.00", , ,
+Amount available to invest:,"14,500.00", , ,
+Total value:,"165,000.00", , ,
+
+Stock,Units held,Price (pence),Value (£),Cost (£),Gain/loss (£),Gain/loss (%),Day gain/loss (£),Day gain/loss (%),
+"ASML Holding NV EUR0.09 *R","15","58,450.00","8,767.50","7,200.00","1,567.50","21.77","-45.20","-0.51"
+"Rolls-Royce Holdings plc Ordinary 20p","2,500","580.25","14,506.25","11,200.00","3,306.25","29.52","87.50","0.61"
+"Unilever plc Ordinary 3.11p","850","4,320.50","3,672.43","3,100.00","572.43","18.47","23.60","0.65"
+"Vodafone Group plc Ordinary US$0.20 3/11","8,500","82.75","7,033.75","9,500.00","-2,466.25","-25.96","-42.50","-0.60"
+"BP plc Ordinary US$0.25","1,200","456.30","5,475.60","6,200.00","-724.40","-11.68","18.20","0.33"
+"Shell plc A EUR0.07 *R","450","2,785.40","12,534.30","10,800.00","1,734.30","16.06","55.80","0.45"
+"Nestle SA CHF0.10 *R","75","8,642.15","6,481.61","5,900.00","581.61","9.86","-32.40","-0.50"
+"Barclays plc Ordinary 25p","2,800","245.60","6,876.80","7,800.00","-923.20","-11.84","14.00","0.20"
+"HSBC Holdings plc Ordinary US$0.50","1,500","675.90","10,138.50","11,200.00","-1,061.50","-9.48","22.50","0.22"
+"Siemens AG EUR1 *R","45","18,567.30","8,355.29","7,650.00","705.29","9.22","37.20","0.45"
+"Tesco plc Ordinary 6.33p","3,200","315.75","10,104.00","9,800.00","304.00","3.10","9.60","0.10"
+"SAP SE EUR1 *R","40","21,450.80","8,580.32","8,100.00","480.32","5.93","-85.60","-0.99"
+"Lloyds Banking Group plc Ordinary 10p","12,000","59.85","7,182.00","8,400.00","-1,218.00","-14.50","24.00","0.34"
+"Airbus SE EUR1 *R","35","17,234.50","6,032.08","5,600.00","432.08","7.72","-17.50","-0.29"
+"Diageo plc Ordinary 28.84p","280","2,567.40","7,188.72","6,850.00","338.72","4.94","16.80","0.23"
+"AstraZeneca plc Ordinary US$0.25","65","12,089.50","7,858.18","7,200.00","658.18","9.14","32.50","0.42"
+"LVMH Moet Hennessy Louis Vuitton SE EUR0.30 *R","12","45,678.20","5,481.38","6,000.00","-518.62","-8.64","54.90","1.01"
+"BT Group plc Ordinary 5p","4,500","145.30","6,538.50","7,200.00","-661.50","-9.19","-18.00","-0.27"
+"National Grid plc Ordinary 11.13p","720","1,034.60","7,449.12","7,000.00","449.12","6.42","14.40","0.19"
+"Richemont SA EUR0.01 *R","55","14,567.80","8,012.29","7,800.00","212.29","2.72","43.90","0.55"
+
+"Totals","","","150,000.00","142,400.00","7,600.00","5.34","125.40","0.08"
+
+"Shares are valued at the bid-price, delayed by 15 minutes. Funds are valued at the most recent bid-price."
+"*1 The price shown is at the close of the last business day."
+"*R This price has been converted to sterling at the rate shown below."
+"  - Euro denominated stocks: 1.14617EUR to 100 pence. Exchange rate correct at 01/10/2025"
+"  - Swiss Franc stocks: 1.12345CHF to 100 pence. Exchange rate correct at 01/10/2025"

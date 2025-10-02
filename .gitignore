@@ -1,0 +1,27 @@
+# Live environment - Never commit real portfolio data or API keys
+data/live/
+
+# API Keys - Never commit these to version control
+data/test/api-keys.json
+data/api-keys.json
+
+# File list cache (auto-generated)
+file-list.json
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDE Files
+.vscode/
+.idea/
+*.sublime-workspace
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Python cache
+__pycache__/
+*.pyc

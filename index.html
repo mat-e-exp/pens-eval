@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pension Evaluation Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+    <!-- File Selection Modal -->
+    <div id="fileSelectModal" class="modal">
+        <div class="modal-content">
+            <h2>Select Data File</h2>
+            <div id="fileList" class="file-list"></div>
+            <div class="modal-buttons">
+                <button id="loadSelectedFile" class="btn-primary">Load Selected File</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard">
+        <header class="header">
+            <h1>Pension Portfolio Analysis</h1>
+            <div class="current-file" id="currentFile"></div>
+            <div class="header-stats">
+                <div class="stat-card">
+                    <span class="stat-label">Total Value</span>
+                    <span class="stat-value" id="totalValue">£0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Total Gain/Loss</span>
+                    <span class="stat-value" id="totalGainLoss">£0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Return %</span>
+                    <span class="stat-value" id="returnPercentage">0%</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Day Change</span>
+                    <span class="stat-value" id="dayChange">£0</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Geographic Distribution Map - Full Width -->
+        <div class="map-section">
+            <div class="chart-container map-container">
+                <h2>Geographic Distribution</h2>
+                <div id="worldMap" style="height: 400px; border-radius: 10px;"></div>
+                <div class="legend" id="countryLegend"></div>
+            </div>
+        </div>
+
+        <!-- Sector Allocation Chart - Full Width -->
+        <div class="sector-section">
+            <div class="chart-container sector-container">
+                <h2>Sector Allocation</h2>
+                <div class="sector-interactive">
+                    <div class="sector-chart-wrapper">
+                        <canvas id="sectorChart"></canvas>
+                        <div class="sector-data-sources" id="sectorDataSources"></div>
+                    </div>
+                    <div class="sector-details" id="sectorDetails">
+                        <div class="sector-info">
+                            <h3 id="sectorName">Hover over a sector</h3>
+                            <div class="sector-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">Portfolio %</span>
+                                    <span class="sector-percentage" id="sectorPercentage"></span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Total Value</span>
+                                    <span class="sector-value" id="sectorValue"></span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Profit/Loss</span>
+                                    <span class="sector-gain" id="sectorGain"></span>
+                                    <span class="sector-gain-percent" id="sectorGainPercent"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="sector-stocks" id="sectorStocks">
+                            <p class="hover-prompt">Hover over a sector to see stocks</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-grid">
+            <!-- Market Cap Distribution -->
+            <div class="chart-container">
+                <h2>Market Cap Distribution</h2>
+                <canvas id="marketCapChart"></canvas>
+                <div class="legend" id="marketCapLegend"></div>
+            </div>
+
+            <!-- Performance Distribution -->
+            <div class="chart-container">
+                <h2>Performance Bands</h2>
+                <canvas id="performanceChart"></canvas>
+                <div class="legend" id="performanceLegend"></div>
+            </div>
+        </div>
+
+        <!-- Top Performers and Losers -->
+        <div class="performance-section">
+            <div class="performers-card">
+                <h3>Top Performers</h3>
+                <div id="topPerformers" class="performers-list"></div>
+            </div>
+            <div class="performers-card">
+                <h3>Bottom Performers</h3>
+                <div id="bottomPerformers" class="performers-list"></div>
+            </div>
+        </div>
+
+        <!-- Holdings Analysis -->
+        <div class="holdings-section">
+            <h2>Portfolio Holdings Analysis</h2>
+            <div class="table-controls">
+                <input type="text" id="searchInput" placeholder="Search holdings..." class="search-input">
+                <select id="sortSelect" class="sort-select">
+                    <option value="upcoming-events">Sort by Upcoming Events</option>
+                    <option value="gain">Sort by Gain %</option>
+                    <option value="value">Sort by Value</option>
+                    <option value="name">Sort by Name</option>
+                    <option value="sentiment">Sort by Stock Sentiment</option>
+                    <option value="sector-sentiment">Sort by Sector Sentiment</option>
+                </select>
+            </div>
+            <div class="holdings-grid" id="holdingsGrid">
+                <!-- Holdings cards will be generated here -->
+            </div>
+        </div>
+
+        <!-- Data Upload -->
+        <div class="upload-section">
+            <button id="selectFile" class="refresh-button">Select File</button>
+            <button id="refreshData" class="refresh-button">Refresh Data</button>
+            <input type="file" id="fileUpload" accept=".csv" style="display: none;">
+            <label for="fileUpload" class="upload-button">Upload New CSV</label>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
