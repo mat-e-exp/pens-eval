@@ -1820,8 +1820,11 @@ function createDrawdownReview() {
             <td class="reason">${r.note}</td></tr>`).join('')}</tbody>`
         : '';
 
+    const hdr = accountSummary;
+    const hdrBits = [['stock', hdr.stockValue], ['cash', hdr.totalCash], ['total', hdr.totalValue]]
+        .map(([k, v]) => `${k} ${v === null ? 'not found' : gbp(v)}`).join(', ');
     srcEl.textContent =
-        `Account: HL export dated ${snapshotDate}. ` +
+        `Account: HL export dated ${snapshotDate}; header lines read: ${hdrBits}. ` +
         (cpi ? `Inflation: ONS ${cpi.title}, ${cpi.period} = ${pct(cpi.rate)}, released ${cpi.releaseDate || 'n/a'}, next release ${cpi.nextRelease || 'n/a'}. ` : '') +
         (W !== null ? `Withdrawal: ${gbp(W)} a year, your input (stored in this browser only).` : '');
 
@@ -2540,11 +2543,15 @@ async function processCSVText(csvText) {
 
     // Account-level lines above the holdings table (HL account summary header)
     accountSummary = { stockValue: null, totalCash: null, availableToInvest: null, totalValue: null, createdAt: null };
+    // Accepts `Total cash:,"35,597.18"`, `Total cash:,35597.18`, `Total cash:, £35,597.18`,
+    // trailing \r, and label variants without the colon.
     const headerNumber = (label) => {
-        const line = lines.find(l => l.startsWith(label));
+        const key = label.replace(/:$/, '').toLowerCase();
+        const line = lines.find(l => l.replace(/^\uFEFF/, '').trim().toLowerCase().startsWith(key));
         if (!line) return null;
-        const m = line.match(/"([^"]*)"/);
-        const n = m ? parseFloat(m[1].replace(/[^0-9.\-]/g, '')) : NaN;
+        const rest = line.slice(line.toLowerCase().indexOf(key) + key.length).replace(/^[:\s]*,?/, '');
+        const m = rest.match(/-?[£]?\s*[\d,]+(?:\.\d+)?/);
+        const n = m ? parseFloat(m[0].replace(/[^0-9.\-]/g, '')) : NaN;
         return isNaN(n) ? null : n;
     };
     accountSummary.stockValue = headerNumber('Stock value:');
