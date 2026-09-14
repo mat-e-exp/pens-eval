@@ -1294,7 +1294,14 @@ function updateHeaderStats() {
     const totalDayChange = portfolioData.reduce((sum, stock) => sum + stock.dayGainLoss, 0);
     const returnPercentage = ((totalValue - totalCost) / totalCost * 100).toFixed(2);
 
-    document.getElementById('totalValue').textContent = `£${totalValue.toLocaleString('en-GB', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    const money = n => `£${n.toLocaleString('en-GB', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    // Account value = holdings + cash from the CSV header. Falls back to holdings only if the header is absent.
+    const cash = accountSummary.totalCash;
+    const accountValue = accountSummary.totalValue !== null ? accountSummary.totalValue : totalValue + (cash || 0);
+    document.getElementById('totalValue').textContent = money(accountValue);
+    document.getElementById('stockValue').textContent = `holdings ${money(totalValue)}`;
+    document.getElementById('cashValue').textContent = cash === null ? 'not in file' : money(cash);
+    document.getElementById('cashPct').textContent = cash === null ? '' : `${(cash / accountValue * 100).toFixed(1)}% of account`;
 
     const gainLossEl = document.getElementById('totalGainLoss');
     gainLossEl.textContent = `£${totalGainLoss.toLocaleString('en-GB', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;

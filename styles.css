@@ -1581,3 +1581,4 @@ details.holdings-section[open] .summary-hint {
 .dd-status.warn { background: rgba(201, 133, 0, 0.18); color: #f0b23c; }
 .bench-table tr.peer-you td { background: rgba(57, 135, 229, 0.14); color: #f0f0f0; font-weight: 600; }
 .bench-table caption { caption-side: top; text-align: left; padding: 0 0 6px; }
+.stat-sub { display: block; color: #888; font-size: 0.75em; margin-top: 4px; }

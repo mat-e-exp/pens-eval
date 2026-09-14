@@ -17,7 +17,7 @@ HL portfolio CSV placed in `data/live/` (real, gitignored) or `data/test/`. Name
 
 ## Sections
 
-**Header stats.** Stock value, gain/loss vs cost, return on cost, day change. From the CSV.
+**Header stats.** Account value (holdings + cash, from the CSV header) with holdings sub-line, cash and its share of the account, gain/loss vs cost, return on cost, day change.
 
 **Geographic Distribution.** Leaflet map of value by domicile (US, UK, EU, CH).
 
