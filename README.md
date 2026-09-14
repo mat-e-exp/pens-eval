@@ -1,80 +1,73 @@
 # Pension Evaluation Dashboard
 
-A dynamic, visually rich web application for analyzing pension CSV data with interactive charts and animations.
+Browser dashboard for a Hargreaves Lansdown SIPP in income drawdown. Reads the HL "account summary" CSV export and shows composition, decision checks, drawdown sustainability and peer comparison. Static HTML/JS served by a small Python dev server. No build step.
 
-## Features
+Personal tool. See `CLAUDE.md` for the data-integrity rules that govern every feature: real data or an explicit "unavailable" message, never generated values.
 
-### Data Input
-- **Drag & Drop Interface**: Simply drag your pension CSV file onto the drop zone
-- **File Upload**: Click to browse and select your file
-- **Demo Mode**: Load sample data to explore features without uploading personal data
-- **Multi-format Support**: Accepts CSV, XLS, and XLSX files
+## Run
 
-### Data Validation
-- Automatic detection of required fields (date, value)
-- Smart column mapping for different pension provider formats
-- Clear error messages for data issues
-- Preview of uploaded data before processing
-
-### Analytics Dashboard
-
-#### Key Statistics
-- **Current Value**: Animated counter showing latest pension value
-- **Total Contributions**: Sum of all personal and employer contributions
-- **Growth Rate**: Overall percentage growth since inception
-- **Projected Value**: Estimated value at retirement (age 65)
-
-#### Interactive Charts
-- **Value Over Time**: Line chart showing pension growth trajectory
-- **Contribution Breakdown**: Doughnut chart showing personal vs employer contributions vs growth
-
-### Visual Features
-- Smooth animations and transitions
-- Responsive design for all devices
-- Gradient backgrounds and modern UI
-- Hover effects and interactive elements
-- Real-time value animations
-
-## CSV Format
-
-The dashboard expects a CSV with these columns (flexible naming supported):
-
-### Required Fields
-- `date` - Transaction/valuation date
-- `value` or `balance` - Current pension value
-
-### Optional Fields
-- `personal_contribution` - Your contributions
-- `employer_contribution` - Employer contributions
-- `growth` or `return` - Investment growth
-
-### Example CSV Structure
-```csv
-date,value,personal_contribution,employer_contribution,growth
-2023-01-01,25000,200,200,50
-2023-02-01,25450,200,200,50
+```
+python3 server.py          # http://localhost:3020, no-cache headers
+python3 scan-files.py      # regenerate file-list.json after adding CSVs
 ```
 
-## Usage
+## Input
 
-1. Open `index.html` in a web browser
-2. Either:
-   - Drag and drop your pension CSV file
-   - Click to browse and select your file
-   - Click "Load Demo Data" to explore with sample data
-3. Review the data preview
-4. Click "Process Data" to generate analytics
-5. Explore your pension performance!
+HL portfolio CSV placed in `data/live/` (real, gitignored) or `data/test/`. Name live files `YYYYMMDD…csv`. The parser reads the header block (`Stock value`, `Total cash`, `Total value`, `Spreadsheet created at`) and the holdings table (`Stock, Units held, Price, Value, Cost, Gain/loss`). Several files → a selection modal on load; the footer allows switching or uploading another.
 
-## Privacy
+## Sections
 
-All data processing happens locally in your browser. No data is sent to any server.
+**Header stats.** Stock value, gain/loss vs cost, return on cost, day change. From the CSV.
 
-## Future Enhancements
+**Geographic Distribution.** Leaflet map of value by domicile (US, UK, EU, CH).
 
-- Additional chart types (candlestick, heatmap, 3D projections)
-- Multiple scenario modeling
-- Fee analysis
-- Retirement income simulator
-- Export functionality
-- Comparison with benchmarks
+**Sector Allocation.** GICS sector donut with per-holding drill-down. Source badges show how many holdings were classified from the holdings map, from Alpha Vantage, or are guesses.
+
+**Benchmark Comparison.** Portfolio vs MSCI World or S&P 500: sector weights, region split, index top 10 overlap, concentration (largest, top 10, effective N), active share (S&P 500 only; needs full constituent weights). Composition only, no returns. Data: `data/benchmarks.json`, hand-refreshed snapshots with `as_of` and `source`.
+
+**Portfolio Review.** Rule inputs (max/min position, sector band vs index, cash target) drive flags, a small-positions table, holdings below cost with rise-to-break-even, sector bets decomposed into the names behind them, and a suggested-actions table with £ amounts.
+
+**Drawdown Sustainability.** Inputs: annual withdrawal (not in the CSV; remembered in the browser), withdrawal-rate ceiling, cash-runway floor. Outputs: withdrawal rate, months of cash runway, forced sales in the next 12 months, cash top-up to floor, cash purchasing-power loss, nominal return needed to hold real capital, next year's withdrawal at the same real value. Inflation = latest ONS CPI annual rate (series D7G7), fetched live. Arithmetic only, no forecasts.
+
+**Peer comparison** (inside Drawdown Sustainability). Where the account sits against published distributions, for a user-selected age band:
+- Pots entering drawdown by size band (FCA, 2024/25)
+- Withdrawal rate vs pots of the same size and vs the same age band (FCA, 2024/25)
+- Private pension wealth in payment P25/median/P75 by age (ONS Wealth and Assets Survey, 2020–22)
+
+Bands only; the sources publish no exact percentiles. Data: `data/peer-benchmarks.json`, transcribed from the official spreadsheets named inside it.
+
+**Market Cap Distribution.** Donut by cap band. Cap band is a name-based guess in code, not sourced data. Treat as indicative.
+
+**Performance Bands.** Value by gain/loss-on-cost band, plus top and bottom performers.
+
+**Portfolio Holdings Analysis.** Collapsible card grid with search and sort. Sector and country show "(guess)" when not from the holdings map or Alpha Vantage.
+
+## Data files
+
+| File | Purpose | Git |
+|---|---|---|
+| `data/live/*.csv` | Real HL exports | ignored |
+| `data/test/*.csv` | Test portfolios | tracked |
+| `data/holdings-map.json` | Static GICS sector, domicile and US ticker per holding, matched by name prefix. Edit by hand when holdings change. | ignored (lists holdings) |
+| `data/benchmarks.json` | MSCI World and S&P 500 composition snapshots | tracked |
+| `data/peer-benchmarks.json` | FCA and ONS peer distributions | tracked |
+| `data/{live,test}/api-keys.json` | Optional API keys; copy from `data/api-keys.example.json` | ignored |
+| `file-list.json` | Output of `scan-files.py` | ignored |
+
+## External data
+
+| Source | Used for | Key |
+|---|---|---|
+| ONS time series D7G7 | CPI annual rate | none |
+| Alpha Vantage Company Overview | GICS sector and country for holdings not in the holdings map | optional, 25 calls/day free |
+| Finnhub, FMP | Earnings and dividend calendars; keys read, features not surfaced in the current UI | optional |
+
+Alpha Vantage calls run from the browser. Without a key the app uses the holdings map and labels the rest as guesses.
+
+## Not built
+
+Return vs benchmark (XIRR, TWR). Needs two or more dated HL exports plus a transaction-history export; see `CLAUDE.md` → Performance Measurement.
+
+## Legacy files
+
+`debug.html`, `test.html`, `list-files.php` are early scaffolding and not used by the current page.
