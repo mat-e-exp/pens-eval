@@ -80,6 +80,15 @@ When real data cannot be accessed:
 - ✅ Only from verified sentiment analysis APIs
 - ❌ No random or generated sentiment scores
 
+**UK Inflation (Drawdown Sustainability section)**
+- ✅ ONS time series D7G7 (CPI annual rate, all items) via `ONS_CPI_URL` in script.js. Public JSON, CORS-enabled, no key. Latest monthly print only.
+- ✅ Annual withdrawal is user input (not in the HL CSV); stored in localStorage for convenience.
+- ❌ No return forecasts or projections. Section is arithmetic on snapshot + input + CPI only.
+
+**Benchmark Composition (Benchmark Comparison section)**
+- ✅ Static index snapshots in `data/benchmarks.json`, hand-refreshed from the sources named in the file (`as_of` per benchmark).
+- ❌ No benchmark return figures. Composition only.
+
 ### API Requirements
 
 **For Real Data Implementation:**
@@ -188,6 +197,16 @@ Use these specific error messages:
 
 **Market Sentiment:**
 "Real-time sentiment analysis not implemented. Would require integration with verified sentiment API."
+
+## Performance Measurement (not yet built)
+
+Return vs benchmark (XIRR, TWR) cannot be computed from a single HL portfolio snapshot: no purchase dates, no cashflows. Prerequisites before building:
+
+1. Monthly HL portfolio CSV exports in `data/live/`, named `YYYYMMDD…csv` (existing convention). Need ≥ 2.
+2. HL transaction history export for the same account (contributions, withdrawals, dealing). Format unverified.
+3. Benchmark total-return series from an approved API (e.g. Alpha Vantage `TIME_SERIES_MONTHLY_ADJUSTED` on an ETF proxy such as SWDA / CSPX). 2–3 tickers fits the 25-call free tier.
+
+Until all three exist, show no return comparison. Do not approximate from cost basis.
 
 ## Project Integrity
 

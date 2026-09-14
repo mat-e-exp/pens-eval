@@ -126,6 +126,22 @@
             </div>
         </div>
 
+        <!-- Drawdown Sustainability -->
+        <div class="review-section">
+            <div class="chart-container">
+                <h2>Drawdown Sustainability</h2>
+                <p class="section-note">Income drawdown checks from the account snapshot, your withdrawal figure and the latest ONS CPI print. Arithmetic only; no return forecasts.</p>
+                <div class="review-rules">
+                    <label>Annual withdrawal £ <input type="number" id="ddAnnualWithdrawal" step="500" min="0" placeholder="enter"></label>
+                    <label>Withdrawal rate ceiling <input type="number" id="ddRateCeiling" value="4" step="0.5" min="0"> % of account</label>
+                    <label>Cash runway floor <input type="number" id="ddRunwayFloor" value="24" step="6" min="0"> months</label>
+                </div>
+                <div class="review-flags" id="ddFlags"></div>
+                <div class="sector-table-wrapper"><table class="bench-table" id="ddTable"></table></div>
+                <p class="section-note" id="ddSources"></p>
+            </div>
+        </div>
+
         <div class="main-grid">
             <!-- Market Cap Distribution -->
             <div class="chart-container">

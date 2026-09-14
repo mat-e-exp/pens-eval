@@ -62,6 +62,35 @@ const HOLDINGS_MAP_SOURCE = 'Holdings map (data/holdings-map.json)';
 // Static benchmark composition (data/benchmarks.json)
 let benchmarks = null;
 
+// UK CPI annual rate, ONS time series D7G7 (CPI ANNUAL RATE 00: ALL ITEMS 2015=100).
+// Public JSON endpoint, CORS-enabled, no key. Latest monthly print only.
+const ONS_CPI_URL = 'https://www.ons.gov.uk/economy/inflationandpriceindices/timeseries/d7g7/mm23/data';
+let cpi = null;   // { rate, period, releaseDate, nextRelease, title }
+let cpiError = null;
+
+async function loadCPI() {
+    try {
+        const response = await fetch(ONS_CPI_URL);
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const data = await response.json();
+        const months = (data.months || []).filter(m => m.value !== '' && !isNaN(parseFloat(m.value)));
+        if (!months.length) throw new Error('no monthly values in response');
+        const last = months[months.length - 1];
+        const desc = data.description || {};
+        cpi = {
+            rate: parseFloat(last.value),
+            period: last.date,
+            releaseDate: desc.releaseDate ? desc.releaseDate.slice(0, 10) : null,
+            nextRelease: desc.nextRelease || null,
+            title: desc.title || 'CPI annual rate'
+        };
+    } catch (error) {
+        cpi = null;
+        cpiError = error.message;
+        console.warn('ONS CPI fetch failed:', error);
+    }
+}
+
 async function loadBenchmarks() {
     try {
         const response = await fetch('data/benchmarks.json?t=' + Date.now());
@@ -1052,7 +1081,7 @@ const pastelColors = [
 ];
 
 let portfolioData = [];
-let accountSummary = { stockValue: null, totalCash: null, availableToInvest: null, totalValue: null };
+let accountSummary = { stockValue: null, totalCash: null, availableToInvest: null, totalValue: null, createdAt: null };
 let charts = {};
 let currentFile = null;
 let availableFiles = [];
@@ -1228,6 +1257,7 @@ function updateDashboard() {
     createSectorChart();
     createBenchmarkComparison();
     createPortfolioReview();
+    createDrawdownReview();
     createWorldMap();
     createMarketCapChart();
     createPerformanceChart();
@@ -1668,6 +1698,117 @@ function createPortfolioReview() {
         <thead><tr><th>Action</th><th>Holding / sector</th><th class="num">Amount</th><th>Reason</th></tr></thead>
         <tbody>${actions.map(a => `<tr><td><span class="action-kind">${a.kind}</span></td><td>${a.name}</td><td class="num">${gbp(a.amount)}</td><td class="reason">${a.why}</td></tr>`).join('')}</tbody>`
         : '<tbody><tr><td class="section-note">Portfolio is within all rules.</td></tr></tbody>';
+}
+
+// ---------------------------------------------------------------------------
+// Drawdown sustainability: withdrawal rate, cash runway and inflation hurdle
+// from the account snapshot, the user's annual withdrawal and the latest ONS
+// CPI print. Arithmetic on real inputs only; no return assumptions.
+// ---------------------------------------------------------------------------
+const WITHDRAWAL_STORAGE_KEY = 'pensEval.annualWithdrawal';
+
+function readDrawdownRules() {
+    const num = (id, fallback) => {
+        const v = parseFloat(document.getElementById(id).value);
+        return isNaN(v) ? fallback : v;
+    };
+    const w = num('ddAnnualWithdrawal', 0);
+    return {
+        withdrawal: w > 0 ? w : null,       // £ per year; null = not entered
+        rateCeiling: num('ddRateCeiling', 4), // % of account per year
+        runwayFloor: num('ddRunwayFloor', 24) // months of withdrawals held as cash
+    };
+}
+
+function createDrawdownReview() {
+    const rules = readDrawdownRules();
+    const gbp = n => '£' + Math.round(n).toLocaleString('en-GB');
+    const pct = n => n.toFixed(1) + '%';
+    const flagsEl = document.getElementById('ddFlags');
+    const tableEl = document.getElementById('ddTable');
+    const srcEl = document.getElementById('ddSources');
+
+    const port = portfolioComposition();
+    const totalCash = accountSummary.totalCash;
+    const accountTotal = accountSummary.totalValue || (port.total + (totalCash || 0));
+    const snapshotDate = accountSummary.createdAt
+        ? accountSummary.createdAt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+        : 'date not found in file';
+
+    const flags = [];
+    const rows = [];   // { measure, value, rule, status: 'ok'|'warn'|'info', note }
+    const W = rules.withdrawal;
+
+    if (W === null) {
+        flags.push({ level: 'info', title: 'Withdrawal',
+            text: 'Enter the annual amount you draw from this SIPP. The CSV does not contain it. Withdrawal rate, cash runway and the inflation hurdle need it.' });
+    } else {
+        // Withdrawal rate
+        const rate = accountTotal ? W / accountTotal * 100 : 0;
+        const overCeiling = rate > rules.rateCeiling;
+        flags.push({ level: overCeiling ? 'warn' : 'ok', title: 'Withdrawal rate',
+            text: `${gbp(W)} a year is ${pct(rate)} of the ${gbp(accountTotal)} account. Ceiling ${pct(rules.rateCeiling)}. ` +
+                  (overCeiling ? `${gbp(W - accountTotal * rules.rateCeiling / 100)} a year above the ceiling.` : 'Within the ceiling.') });
+        rows.push({ measure: 'Withdrawal rate', value: pct(rate), rule: '≤ ' + pct(rules.rateCeiling), status: overCeiling ? 'warn' : 'ok',
+            note: 'Annual withdrawal ÷ total account value at the snapshot.' });
+
+        // Cash runway
+        if (totalCash !== null) {
+            const months = W > 0 ? totalCash / (W / 12) : Infinity;
+            const short = months < rules.runwayFloor;
+            const shortfall12 = Math.max(0, W - totalCash);
+            flags.push({ level: short ? 'warn' : 'ok', title: 'Cash runway',
+                text: `${gbp(totalCash)} cash covers ${months.toFixed(1)} months of withdrawals. Floor ${rules.runwayFloor} months. ` +
+                      (shortfall12 > 0 ? `${gbp(shortfall12)} of the next 12 months must come from selling holdings.` : 'No forced sales in the next 12 months.') });
+            rows.push({ measure: 'Cash runway', value: months.toFixed(1) + ' months', rule: '≥ ' + rules.runwayFloor + ' months', status: short ? 'warn' : 'ok',
+                note: 'Total cash ÷ monthly withdrawal. Months of income before holdings must be sold.' });
+            rows.push({ measure: 'Cash top-up to reach floor', value: gbp(Math.max(0, W / 12 * rules.runwayFloor - totalCash)), rule: '', status: 'info',
+                note: 'Sales needed now to hold the runway floor in cash.' });
+        } else {
+            flags.push({ level: 'info', title: 'Cash runway', text: 'No "Total cash" line found in this file.' });
+        }
+    }
+
+    // Inflation
+    if (cpi) {
+        const r = cpi.rate / 100;
+        if (totalCash !== null) {
+            rows.push({ measure: 'Cash purchasing-power loss', value: gbp(totalCash * r) + ' / year', rule: '', status: totalCash * r > 0 ? 'warn' : 'ok',
+                note: `Total cash × CPI ${pct(cpi.rate)}. Uninvested cash loses this much real value each year at the current rate.` });
+        }
+        if (W !== null) {
+            const rate = accountTotal ? W / accountTotal * 100 : 0;
+            const hurdle = rate + cpi.rate;
+            flags.push({ level: 'info', title: 'Inflation hurdle',
+                text: `To keep the account's real value flat while drawing ${gbp(W)}, the portfolio must return ${pct(hurdle)} a year: ` +
+                      `${pct(rate)} withdrawal rate + ${pct(cpi.rate)} CPI (${cpi.period}). Next year's withdrawal at the same real value: ${gbp(W * (1 + r))}.` });
+            rows.push({ measure: 'Nominal return to preserve real capital', value: pct(hurdle), rule: '', status: 'info',
+                note: 'Withdrawal rate + CPI. V(1+R) − W = V(1+CPI) ⇒ R = CPI + W/V.' });
+            rows.push({ measure: 'Withdrawal next year at same real value', value: gbp(W * (1 + r)), rule: '', status: 'info',
+                note: `Current withdrawal × (1 + CPI ${pct(cpi.rate)}).` });
+        }
+    } else {
+        flags.push({ level: 'info', title: 'Inflation',
+            text: 'UK CPI unavailable. Fetch of ONS series D7G7 failed' + (cpiError ? ` (${cpiError})` : '') + '. Inflation measures not shown.' });
+    }
+
+    flagsEl.innerHTML = flags.map(f => `
+        <div class="review-flag ${f.level}">
+            <span class="review-flag-title">${f.title}</span>
+            <span class="review-flag-text">${f.text}</span>
+        </div>`).join('');
+
+    tableEl.innerHTML = rows.length ? `
+        <thead><tr><th>Measure</th><th class="num">Value</th><th class="num">Rule</th><th>Status</th><th>Basis</th></tr></thead>
+        <tbody>${rows.map(r => `<tr><td>${r.measure}</td><td class="num">${r.value}</td><td class="num">${r.rule}</td>
+            <td><span class="dd-status ${r.status}">${r.status === 'ok' ? 'OK' : r.status === 'warn' ? 'Check' : '—'}</span></td>
+            <td class="reason">${r.note}</td></tr>`).join('')}</tbody>`
+        : '';
+
+    srcEl.textContent =
+        `Account: HL export dated ${snapshotDate}. ` +
+        (cpi ? `Inflation: ONS ${cpi.title}, ${cpi.period} = ${pct(cpi.rate)}, released ${cpi.releaseDate || 'n/a'}, next release ${cpi.nextRelease || 'n/a'}. ` : '') +
+        (W !== null ? `Withdrawal: ${gbp(W)} a year, your input (stored in this browser only).` : '');
 }
 
 // Create world map for geographic distribution
@@ -2140,7 +2281,7 @@ document.getElementById('fileUpload').addEventListener('change', (e) => {
 // Event handlers
 document.addEventListener('DOMContentLoaded', async () => {
     // Load static holdings classification and benchmark data, then API keys
-    await Promise.all([loadHoldingsMap(), loadBenchmarks()]);
+    await Promise.all([loadHoldingsMap(), loadBenchmarks(), loadCPI()]);
     await loadAPIKeys();
 
     document.getElementById('benchmarkSelect').addEventListener('change', () => {
@@ -2152,6 +2293,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     ['ruleMaxPosition', 'ruleMinPosition', 'ruleSectorBand', 'ruleCashTarget'].forEach(id => {
         document.getElementById(id).addEventListener('input', () => {
             if (portfolioData.length > 0) createPortfolioReview();
+        });
+    });
+    // Drawdown inputs. Annual withdrawal is remembered in this browser only.
+    try {
+        const saved = localStorage.getItem(WITHDRAWAL_STORAGE_KEY);
+        if (saved) document.getElementById('ddAnnualWithdrawal').value = saved;
+    } catch (e) { /* storage unavailable; input starts empty */ }
+    ['ddAnnualWithdrawal', 'ddRateCeiling', 'ddRunwayFloor'].forEach(id => {
+        document.getElementById(id).addEventListener('input', () => {
+            if (id === 'ddAnnualWithdrawal') {
+                try { localStorage.setItem(WITHDRAWAL_STORAGE_KEY, document.getElementById(id).value); } catch (e) { /* ignore */ }
+            }
+            if (portfolioData.length > 0) createDrawdownReview();
         });
     });
 
@@ -2234,7 +2388,7 @@ async function processCSVText(csvText) {
     let startParsing = false;
 
     // Account-level lines above the holdings table (HL account summary header)
-    accountSummary = { stockValue: null, totalCash: null, availableToInvest: null, totalValue: null };
+    accountSummary = { stockValue: null, totalCash: null, availableToInvest: null, totalValue: null, createdAt: null };
     const headerNumber = (label) => {
         const line = lines.find(l => l.startsWith(label));
         if (!line) return null;
@@ -2246,6 +2400,10 @@ async function processCSVText(csvText) {
     accountSummary.totalCash = headerNumber('Total cash:');
     accountSummary.availableToInvest = headerNumber('Amount available to invest:');
     accountSummary.totalValue = headerNumber('Total value:');
+    // "Spreadsheet created at,01-10-2025 10:27" (DD-MM-YYYY HH:MM, HL export)
+    const createdLine = lines.find(l => l.startsWith('Spreadsheet created at'));
+    const cm = createdLine && createdLine.match(/(\d{2})-(\d{2})-(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+    accountSummary.createdAt = cm ? new Date(+cm[3], +cm[2] - 1, +cm[1], +(cm[4] || 0), +(cm[5] || 0)) : null;
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];

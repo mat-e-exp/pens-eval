@@ -1565,3 +1565,17 @@ details.holdings-section[open] .summary-hint {
     font-size: 0.9em;
     min-width: 260px;
 }
+
+/* Drawdown sustainability status pill */
+.dd-status {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 0.75em;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #b8b8b8;
+}
+.dd-status.ok   { background: rgba(25, 158, 112, 0.18); color: #4fd6a3; }
+.dd-status.warn { background: rgba(201, 133, 0, 0.18); color: #f0b23c; }
