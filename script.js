@@ -33,6 +33,48 @@ let USE_FINANCIAL_CALENDAR = false;
 // Track current environment
 let currentEnvironment = null;
 
+// Static holdings classification (data/holdings-map.json): authoritative GICS
+// sector + domicile per known holding. Name-pattern guessing is the fallback only.
+let holdingsMap = [];
+
+async function loadHoldingsMap() {
+    try {
+        const response = await fetch('data/holdings-map.json?t=' + Date.now());
+        if (!response.ok) {
+            console.warn('holdings-map.json not found; sector/country will be guessed from names');
+            return;
+        }
+        const data = await response.json();
+        holdingsMap = (data.holdings || []).map(h => ({ ...h, match: h.match.toLowerCase() }));
+        console.log(`Holdings map loaded: ${holdingsMap.length} entries`);
+    } catch (error) {
+        console.warn('Error loading holdings map:', error);
+    }
+}
+
+const lookupHolding = (stockName) => {
+    const name = stockName.replace(/&#39;/g, "'").trim().toLowerCase();
+    return holdingsMap.find(h => name.startsWith(h.match)) || null;
+};
+
+const HOLDINGS_MAP_SOURCE = 'Holdings map (data/holdings-map.json)';
+
+// Static benchmark composition (data/benchmarks.json)
+let benchmarks = null;
+
+async function loadBenchmarks() {
+    try {
+        const response = await fetch('data/benchmarks.json?t=' + Date.now());
+        if (!response.ok) {
+            console.warn('benchmarks.json not found; benchmark comparison disabled');
+            return;
+        }
+        benchmarks = await response.json();
+    } catch (error) {
+        console.warn('Error loading benchmarks:', error);
+    }
+}
+
 // Load API keys from external file based on environment
 async function loadAPIKeys(environment = null) {
     try {
@@ -234,6 +276,9 @@ const getCountryFromAPI = async (symbol) => {
 
 // Get country from stock name with data source tracking
 const getCountry = async (stockName) => {
+    const mapped = lookupHolding(stockName);
+    if (mapped) return { country: mapped.country, source: HOLDINGS_MAP_SOURCE };
+
     let countryData = null;
 
     // Try API first if available
@@ -285,6 +330,9 @@ const getCountry = async (stockName) => {
 
 // Synchronous version for immediate use (uses cache or intelligent guess)
 const getCountrySync = (stockName) => {
+    const mapped = lookupHolding(stockName);
+    if (mapped) return { country: mapped.country, source: HOLDINGS_MAP_SOURCE };
+
     // Check cache first if API is enabled
     if (USE_GICS_API && ALPHA_VANTAGE_API_KEY) {
         const symbol = extractStockSymbol(stockName);
@@ -335,7 +383,7 @@ const getCountrySync = (stockName) => {
 const extractStockSymbol = (stockName) => {
     // Try to extract ticker symbol from parentheses like "Apple (AAPL)"
     const match = stockName.match(/\(([A-Z]+)\)/);
-    if (match) {
+    if (match && match[1] !== 'CDI') {  // "(CDI)" is HL's depository-interest suffix, not a ticker
         return match[1];
     }
 
@@ -552,6 +600,9 @@ const getSectorBestGuess = (stockName) => {
 
 // Get sector for a stock using GICS classification with intelligent fallbacks
 const getSector = async (stockName) => {
+    const mapped = lookupHolding(stockName);
+    if (mapped) return { sector: mapped.sector, source: HOLDINGS_MAP_SOURCE };
+
     let sectorData = null;
 
     // Try API first if available
@@ -574,6 +625,9 @@ const getSector = async (stockName) => {
 
 // Synchronous version for immediate use (uses cache or intelligent guess)
 const getSectorSync = (stockName) => {
+    const mapped = lookupHolding(stockName);
+    if (mapped) return { sector: mapped.sector, source: HOLDINGS_MAP_SOURCE };
+
     // Check cache first if API is enabled
     if (USE_GICS_API && ALPHA_VANTAGE_API_KEY) {
         const symbol = extractStockSymbol(stockName);
@@ -682,51 +736,6 @@ const getDividendInfo = async (symbol) => {
 };
 
 // Intelligent financial calendar guessing based on company patterns and typical schedules
-const getFinancialCalendarBestGuess = (stockName) => {
-    const today = new Date();
-    const symbol = extractStockSymbol(stockName) || stockName.split(' ')[0];
-
-    // Determine likely earnings pattern based on company size/type
-    const isLargeCap = getMarketCapBestGuess(stockName).marketCap.includes('Large');
-    const sectorData = getSectorBestGuess(stockName);
-
-    // Large caps typically report quarterly, smaller companies may be more irregular
-    const daysToEarnings = isLargeCap ?
-        Math.floor(Math.random() * 60) + 10 :  // 10-70 days for large caps
-        Math.floor(Math.random() * 90) + 15;   // 15-105 days for others
-
-    const earningsDate = new Date(today);
-    earningsDate.setDate(today.getDate() + daysToEarnings);
-
-    // Dividend patterns - tech companies often don't pay dividends, utilities/banks do
-    const isDividendPaying = sectorData.sector.includes('Utilities') ||
-                            sectorData.sector.includes('Financials') ||
-                            sectorData.sector.includes('Consumer Staples') ||
-                            !sectorData.sector.includes('Technology');
-
-    const dividendData = isDividendPaying ? {
-        exDividendDate: new Date(today.getTime() + Math.random() * 120 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        dividendAmount: (Math.random() * 3 + 0.5).toFixed(2),
-        paymentDate: new Date(today.getTime() + (Math.random() * 120 + 30) * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    } : null;
-
-    const source = `Intelligent guess based on ${isLargeCap ? 'large-cap' : 'mid/small-cap'} ${sectorData.sector} company patterns`;
-
-    return {
-        symbol: symbol,
-        earnings: {
-            date: earningsDate.toISOString().split('T')[0],
-            epsEstimate: (Math.random() * 8 + 0.5).toFixed(2),
-            quarter: Math.floor((earningsDate.getMonth() + 3) / 3),
-            year: earningsDate.getFullYear(),
-            time: Math.random() > 0.6 ? 'bmo' : 'amc'
-        },
-        dividend: dividendData,
-        lastUpdated: new Date().toISOString(),
-        source: source
-    };
-};
-
 // Get comprehensive financial calendar data for a stock with intelligent fallbacks
 const getFinancialCalendar = async (stockName) => {
     const symbol = extractStockSymbol(stockName);
@@ -755,10 +764,8 @@ const getFinancialCalendar = async (stockName) => {
         }
     }
 
-    // Use intelligent guessing as fallback
-    const guess = getFinancialCalendarBestGuess(stockName);
-    console.log(`Financial calendar for ${stockName}: ${guess.source}`);
-    return guess;
+    // No fabricated fallback: without API data the calendar is simply unavailable
+    return null;
 };
 
 // Format financial calendar data for display
@@ -1045,6 +1052,7 @@ const pastelColors = [
 ];
 
 let portfolioData = [];
+let accountSummary = { stockValue: null, totalCash: null, availableToInvest: null, totalValue: null };
 let charts = {};
 let currentFile = null;
 let availableFiles = [];
@@ -1218,6 +1226,8 @@ function updateDashboard() {
 
     // Create charts
     createSectorChart();
+    createBenchmarkComparison();
+    createPortfolioReview();
     createWorldMap();
     createMarketCapChart();
     createPerformanceChart();
@@ -1256,198 +1266,408 @@ function updateHeaderStats() {
 }
 
 // Create interactive sector allocation donut chart
+// Sector tile colours: 8 categorical slots validated for the dark surface
+// (dataviz palette). Sectors ranked 9+ by weight get a neutral accent; the tile
+// carries the sector name so identity never relies on colour alone.
+const sectorPalette = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
+const sectorNeutral = '#6b6b6b';
+
 function createSectorChart() {
-    const ctx = document.getElementById('sectorChart').getContext('2d');
-    const sectorData = {};
-    const sectorStocks = {};
-    const sectorGains = {};
-    const sectorCosts = {};
+    const grid = document.getElementById('sectorGrid');
+    grid.innerHTML = '';
 
-    // Group stocks by sector and calculate totals
+    const fmtGBP = n => n.toLocaleString('en-GB', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+    // Group holdings by sector
+    const groups = {};
     portfolioData.forEach(stock => {
-        if (!sectorData[stock.sector]) {
-            sectorData[stock.sector] = 0;
-            sectorStocks[stock.sector] = [];
-            sectorGains[stock.sector] = 0;
-            sectorCosts[stock.sector] = 0;
-        }
-        sectorData[stock.sector] += stock.value;
-        sectorGains[stock.sector] += stock.gainLoss;
-        sectorCosts[stock.sector] += stock.cost;
-        sectorStocks[stock.sector].push(stock);
+        const sector = stock.sector || 'Unclassified';
+        if (!groups[sector]) groups[sector] = { sector, stocks: [], value: 0, cost: 0, gainLoss: 0 };
+        groups[sector].stocks.push(stock);
+        groups[sector].value += stock.value;
+        groups[sector].cost += stock.cost;
+        groups[sector].gainLoss += stock.gainLoss;
     });
 
-    const sortedSectors = Object.entries(sectorData).sort((a, b) => b[1] - a[1]);
-    const totalValue = Object.values(sectorData).reduce((a, b) => a + b, 0);
+    const sorted = Object.values(groups).sort((a, b) => b.value - a.value);
+    const totalValue = sorted.reduce((sum, g) => sum + g.value, 0);
 
-    if (charts.sector) charts.sector.destroy();
+    sorted.forEach((g, index) => {
+        const colour = index < sectorPalette.length ? sectorPalette[index] : sectorNeutral;
+        const weight = totalValue ? (g.value / totalValue) * 100 : 0;
+        const glPct = g.cost ? (g.gainLoss / g.cost) * 100 : 0;
+        const glClass = g.gainLoss >= 0 ? 'positive' : 'negative';
+        const glSign = g.gainLoss >= 0 ? '+' : '';
 
-    charts.sector = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: sortedSectors.map(s => s[0]),
-            datasets: [{
-                data: sortedSectors.map(s => s[1]),
-                backgroundColor: pastelColors.slice(0, sortedSectors.length),
-                borderColor: '#1a1a1a',
-                borderWidth: 2,
-                hoverOffset: 15,  // This creates the "raised" effect
-                hoverBorderWidth: 3
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '50%',
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    enabled: false  // Disable default tooltip, we'll use our custom display
-                }
-            },
-            onHover: (event, activeElements) => {
-                if (activeElements.length > 0) {
-                    const element = activeElements[0];
-                    const sectorIndex = element.index;
-                    const sectorName = sortedSectors[sectorIndex][0];
-                    const sectorValue = sortedSectors[sectorIndex][1];
-                    const sectorGain = sectorGains[sectorName];
-                    const sectorCost = sectorCosts[sectorName];
-                    const percentage = ((sectorValue / totalValue) * 100).toFixed(1);
+        const holdingsHTML = g.stocks
+            .slice()
+            .sort((a, b) => b.value - a.value)
+            .map(stock => {
+                const cls = stock.gainLossPercent >= 0 ? 'positive' : 'negative';
+                const sign = stock.gainLossPercent >= 0 ? '+' : '';
+                const share = totalValue ? (stock.value / totalValue) * 100 : 0;
+                return `
+                <div class="stock-item">
+                    <div class="stock-name">${stock.name.replace(/\*\d+/g, '').trim()}</div>
+                    <div class="stock-details">
+                        <span class="stock-share">${share.toFixed(2)}%</span>
+                        <span class="stock-value">£${fmtGBP(stock.value)}</span>
+                        <span class="stock-gain ${cls}">${sign}${stock.gainLossPercent.toFixed(1)}%</span>
+                    </div>
+                </div>`;
+            }).join('');
 
-                    // Update sector info display and mark as actively hovered
-                    updateSectorDisplay(sectorName, percentage, sectorValue, sectorGain, sectorCost, sectorStocks[sectorName]);
-                    window.sectorHoverActive = true;
+        const tile = document.createElement('div');
+        tile.className = 'sector-tile open';
+        tile.style.setProperty('--sector-colour', colour);
+        tile.innerHTML = `
+            <div class="tile-head">
+                <span class="tile-swatch"></span>
+                <span class="tile-name">${g.sector}</span>
+                <span class="tile-count">${g.stocks.length} holding${g.stocks.length === 1 ? '' : 's'}</span>
+            </div>
+            <div class="tile-weight">${weight.toFixed(1)}%<span class="tile-weight-label">of portfolio</span></div>
+            <div class="tile-bar"><div class="tile-bar-fill" style="width:${Math.min(weight, 100)}%"></div></div>
+            <div class="tile-figures">
+                <div class="tile-figure">
+                    <span class="tile-label">Value</span>
+                    <span class="tile-value">£${fmtGBP(g.value)}</span>
+                </div>
+                <div class="tile-figure">
+                    <span class="tile-label">Profit/Loss</span>
+                    <span class="tile-value ${glClass}">${glSign}£${fmtGBP(g.gainLoss)}</span>
+                    <span class="tile-sub ${glClass}">${glSign}${glPct.toFixed(1)}%</span>
+                </div>
+            </div>
+            <div class="tile-holdings">${holdingsHTML}</div>
+        `;
 
-                    // Clear any existing timeout
-                    if (window.sectorHoverTimeout) {
-                        clearTimeout(window.sectorHoverTimeout);
-                        window.sectorHoverTimeout = null;
-                    }
-                } else if (window.sectorHoverActive) {
-                    // Delay reset to allow mouse movement to details panel
-                    window.sectorHoverTimeout = setTimeout(() => {
-                        if (!window.sectorDetailsHovered) {
-                            resetSectorDisplay();
-                            window.sectorHoverActive = false;
-                        }
-                    }, 200); // 200ms delay
-                }
-            }
-        }
+        tile.querySelector('.tile-head').addEventListener('click', () => tile.classList.toggle('open'));
+        grid.appendChild(tile);
     });
 
-    // Store sector data for interactive use
-    window.sectorData = { sectorStocks, sortedSectors, totalValue, sectorGains, sectorCosts };
-
-    // Add mouse event listeners to sector details panel for stable hover behavior
-    const sectorDetailsEl = document.getElementById('sectorDetails');
-
-    sectorDetailsEl.addEventListener('mouseenter', () => {
-        window.sectorDetailsHovered = true;
-        // Clear any pending timeout
-        if (window.sectorHoverTimeout) {
-            clearTimeout(window.sectorHoverTimeout);
-            window.sectorHoverTimeout = null;
-        }
-    });
-
-    sectorDetailsEl.addEventListener('mouseleave', () => {
-        window.sectorDetailsHovered = false;
-        // Reset display when leaving the details panel
-        if (window.sectorHoverActive) {
-            window.sectorHoverTimeout = setTimeout(() => {
-                resetSectorDisplay();
-                window.sectorHoverActive = false;
-            }, 100); // Short delay in case user moves back to chart
-        }
-    });
-
-    // Add data source summary underneath the donut chart
+    // Data source summary
     const sectorDataSourcesEl = document.getElementById('sectorDataSources');
-
-    // Calculate source breakdown for sector data
-    const sourceCounts = { api: 0, guess: 0, default: 0 };
+    const sourceCounts = { map: 0, api: 0, guess: 0, default: 0 };
     portfolioData.forEach(stock => {
-        const sectorData = stock.gicsSector || { source: 'Intelligent guess' };
-        if (sectorData.source?.includes('Alpha Vantage')) sourceCounts.api++;
-        else if (sectorData.source?.includes('Intelligent guess')) sourceCounts.guess++;
+        const src = stock.gicsSector?.source || 'Intelligent guess';
+        if (src.includes('Holdings map')) sourceCounts.map++;
+        else if (src.includes('Alpha Vantage')) sourceCounts.api++;
+        else if (src.includes('Intelligent guess')) sourceCounts.guess++;
         else sourceCounts.default++;
     });
-
     sectorDataSourcesEl.innerHTML = `
         <div class="data-source-info">
             <div class="source-title">Sector Data Sources:</div>
             <div class="source-breakdown">
+                ${sourceCounts.map > 0 ? `<span class="source-api">✅ ${sourceCounts.map} from holdings map</span>` : ''}
                 ${sourceCounts.api > 0 ? `<span class="source-api">🔗 ${sourceCounts.api} from Alpha Vantage API</span>` : ''}
-                ${sourceCounts.guess > 0 ? `<span class="source-guess">🧠 ${sourceCounts.guess} intelligent guesses</span>` : ''}
+                ${sourceCounts.guess > 0 ? `<span class="source-guess">🧠 ${sourceCounts.guess} name-pattern guesses</span>` : ''}
                 ${sourceCounts.default > 0 ? `<span class="source-default">📊 ${sourceCounts.default} default classifications</span>` : ''}
             </div>
         </div>
     `;
 }
 
-// Update sector display panel
-function updateSectorDisplay(sectorName, percentage, value, totalGain, totalCost, stocks) {
-    document.getElementById('sectorName').textContent = sectorName;
-    document.getElementById('sectorPercentage').textContent = `${percentage}%`;
-    document.getElementById('sectorValue').textContent = `£${value.toLocaleString('en-GB', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-
-    // Calculate sector gain/loss percentage
-    const sectorGainPercent = totalCost > 0 ? ((totalGain / totalCost) * 100) : 0;
-
-    // Update sector gain/loss with color coding
-    const gainElement = document.getElementById('sectorGain');
-    const gainPercentElement = document.getElementById('sectorGainPercent');
-    const gainSymbol = totalGain >= 0 ? '+' : '';
-    const percentSymbol = sectorGainPercent >= 0 ? '+' : '';
-    const gainClass = totalGain >= 0 ? 'positive' : 'negative';
-
-    gainElement.textContent = `${gainSymbol}£${totalGain.toLocaleString('en-GB', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-    gainElement.className = `sector-gain ${gainClass}`;
-
-    gainPercentElement.textContent = `(${percentSymbol}${sectorGainPercent.toFixed(1)}%)`;
-    gainPercentElement.className = `sector-gain-percent ${gainClass}`;
-
-    const stocksContainer = document.getElementById('sectorStocks');
-    stocksContainer.innerHTML = '';
-
-    // Sort stocks by value (highest first)
-    const sortedStocks = stocks.sort((a, b) => b.value - a.value);
-
-    sortedStocks.forEach(stock => {
-        const stockItem = document.createElement('div');
-        stockItem.className = 'stock-item';
-
-        const gainClass = stock.gainLossPercent >= 0 ? 'positive' : 'negative';
-        const gainSymbol = stock.gainLossPercent >= 0 ? '+' : '';
-
-        stockItem.innerHTML = `
-            <div class="stock-name">${stock.name.replace(/\*\d+/g, '').trim()}</div>
-            <div class="stock-details">
-                <span class="stock-value">£${stock.value.toLocaleString('en-GB', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-                <span class="stock-gain ${gainClass}">${gainSymbol}${stock.gainLossPercent.toFixed(1)}%</span>
-            </div>
-        `;
-
-        stocksContainer.appendChild(stockItem);
-    });
+// ---------------------------------------------------------------------------
+// Benchmark comparison: composition, concentration and active share against a
+// static index snapshot (data/benchmarks.json). Snapshot data only; no returns.
+// ---------------------------------------------------------------------------
+function portfolioComposition() {
+    const total = portfolioData.reduce((sum, s) => sum + s.value, 0);
+    const sectors = {}, regions = {};
+    const weights = portfolioData.map(s => {
+        const w = total ? (s.value / total) * 100 : 0;
+        const sector = s.sector || 'Unclassified';
+        const region = s.country || 'Unknown';
+        sectors[sector] = (sectors[sector] || 0) + w;
+        regions[region] = (regions[region] || 0) + w;
+        return { name: s.name, weight: w, ticker: lookupHolding(s.name)?.ticker || null };
+    }).sort((a, b) => b.weight - a.weight);
+    const hhi = weights.reduce((sum, h) => sum + Math.pow(h.weight / 100, 2), 0);
+    return {
+        total, sectors, regions, weights,
+        count: weights.length,
+        largest: weights[0]?.weight || 0,
+        top10: weights.slice(0, 10).reduce((sum, h) => sum + h.weight, 0),
+        effectiveN: hhi ? 1 / hhi : 0
+    };
 }
 
-// Reset sector display to default state
-function resetSectorDisplay() {
-    document.getElementById('sectorName').textContent = 'Hover over a sector';
-    document.getElementById('sectorPercentage').textContent = '';
-    document.getElementById('sectorValue').textContent = '';
-    document.getElementById('sectorGain').textContent = '';
-    document.getElementById('sectorGain').className = 'sector-gain';
-    document.getElementById('sectorGainPercent').textContent = '';
-    document.getElementById('sectorGainPercent').className = 'sector-gain-percent';
+function benchmarkStats(bench) {
+    if (bench.holdings) {
+        const sorted = bench.holdings.slice().sort((a, b) => b.weight - a.weight);
+        const hhi = sorted.reduce((sum, h) => sum + Math.pow(h.weight / 100, 2), 0);
+        return {
+            largest: sorted[0].weight,
+            top10: sorted.slice(0, 10).reduce((sum, h) => sum + h.weight, 0),
+            effectiveN: hhi ? 1 / hhi : null,
+            top10List: sorted.slice(0, 10)
+        };
+    }
+    return { largest: bench.largest, top10: bench.top10_total, effectiveN: null, top10List: bench.top10 };
+}
 
-    const stocksContainer = document.getElementById('sectorStocks');
-    stocksContainer.innerHTML = '<p class="hover-prompt">Hover over a sector to see stocks</p>';
+// Active share = 0.5 * sum |w_portfolio - w_index| over the union of names.
+// Requires full index weights; only available for benchmarks with a holdings list.
+function activeShare(port, bench) {
+    if (!bench.holdings) return null;
+    const idx = {};
+    bench.holdings.forEach(h => { idx[h.ticker] = h.weight; });
+    let sum = 0, indexWeightHeld = 0;
+    port.weights.forEach(h => {
+        const bw = h.ticker && idx[h.ticker] !== undefined ? idx[h.ticker] : 0;
+        sum += Math.abs(h.weight - bw);
+        indexWeightHeld += bw;
+    });
+    sum += (100 - indexWeightHeld);  // index names not held at all
+    return sum / 2;
+}
+
+function createBenchmarkComparison() {
+    const statsEl = document.getElementById('benchStats');
+    const metaEl = document.getElementById('benchmarkMeta');
+    if (!benchmarks) {
+        statsEl.innerHTML = '<p class="section-note">Benchmark data unavailable (data/benchmarks.json).</p>';
+        return;
+    }
+    const key = document.getElementById('benchmarkSelect').value;
+    const bench = benchmarks[key];
+    const port = portfolioComposition();
+    const bstats = benchmarkStats(bench);
+    const fmtPct = n => (n === null || n === undefined) ? 'n/a' : n.toFixed(1) + '%';
+    const fmtN = n => (n === null || n === undefined) ? 'n/a' : n.toFixed(0);
+    const diffCell = d => {
+        const cls = d > 0 ? 'over' : d < 0 ? 'under' : 'flat';
+        const sign = d > 0 ? '+' : '';
+        const width = Math.min(Math.abs(d), 30) / 30 * 50;  // half-width bar, capped at 30pt
+        return `<td class="num diff ${cls}">
+                    <div class="diff-bar"><div class="diff-fill ${cls}" style="width:${width}%"></div></div>
+                    <span>${sign}${d.toFixed(1)}</span>
+                </td>`;
+    };
+
+    metaEl.textContent = `${bench.name} composition as of ${bench.as_of}. Source: ${bench.source}. Snapshot comparison only; no return data.`;
+
+    // Stat tiles
+    const share = activeShare(port, bench);
+    const top10Tickers = new Set(bstats.top10List.map(h => h.ticker));
+    const overlap = port.weights.filter(h => h.ticker && top10Tickers.has(h.ticker)).reduce((sum, h) => sum + h.weight, 0);
+    const tiles = [
+        ['Holdings', fmtN(port.count), fmtN(bench.constituents)],
+        ['Largest position', fmtPct(port.largest), fmtPct(bstats.largest)],
+        ['Top 10 weight', fmtPct(port.top10), fmtPct(bstats.top10)],
+        ['Effective holdings (1/HHI)', fmtN(port.effectiveN), fmtN(bstats.effectiveN)],
+        ['Weight in index top 10', fmtPct(overlap), fmtPct(bstats.top10)],
+        ['Active share', share === null ? 'n/a (needs full index weights)' : fmtPct(share), '0%']
+    ];
+    statsEl.innerHTML = tiles.map(([label, p, b]) => `
+        <div class="bench-stat">
+            <span class="tile-label">${label}</span>
+            <span class="bench-stat-values"><span class="bench-p">${p}</span><span class="bench-vs">vs</span><span class="bench-b">${b}</span></span>
+            <span class="bench-stat-legend">portfolio vs index</span>
+        </div>`).join('');
+
+    // Sector table: union of sectors, ordered by index weight
+    const sectorNames = Array.from(new Set([...Object.keys(bench.sectors), ...Object.keys(port.sectors)]))
+        .sort((a, b) => (bench.sectors[b] || 0) - (bench.sectors[a] || 0));
+    document.getElementById('benchSectorTable').innerHTML = `
+        <thead><tr><th>Sector</th><th class="num">Portfolio</th><th class="num">Index</th><th class="num">Diff (pts)</th></tr></thead>
+        <tbody>${sectorNames.map(name => {
+            const p = port.sectors[name] || 0, b = bench.sectors[name] || 0;
+            return `<tr><td>${name}</td><td class="num">${fmtPct(p)}</td><td class="num">${fmtPct(b)}</td>${diffCell(p - b)}</tr>`;
+        }).join('')}</tbody>`;
+
+    // Region table. Portfolio regions are US/UK/EU/CH; MSCI publishes US, Japan, UK,
+    // Canada, France and Other, so Europe ex-UK is compared against France+Other.
+    let regionRows;
+    if (key === 'sp500') {
+        regionRows = [['US', port.regions['US'] || 0, 100],
+                      ['Non-US (UK, EU, CH)', 100 - (port.regions['US'] || 0), 0]];
+    } else {
+        const c = bench.countries;
+        const euCh = (port.regions['EU'] || 0) + (port.regions['CH'] || 0);
+        regionRows = [['US', port.regions['US'] || 0, c['US']],
+                      ['UK', port.regions['UK'] || 0, c['UK']],
+                      ['Japan', 0, c['Japan']],
+                      ['Canada', 0, c['Canada']],
+                      ['Europe ex-UK and other (index: France + Other)', euCh, c['France'] + c['Other']]];
+    }
+    document.getElementById('benchRegionTable').innerHTML = `
+        <thead><tr><th>Region</th><th class="num">Portfolio</th><th class="num">Index</th><th class="num">Diff (pts)</th></tr></thead>
+        <tbody>${regionRows.map(([name, p, b]) =>
+            `<tr><td>${name}</td><td class="num">${fmtPct(p)}</td><td class="num">${fmtPct(b)}</td>${diffCell(p - b)}</tr>`).join('')}</tbody>`;
+
+    // Index top 10 vs portfolio weight in each
+    const portByTicker = {};
+    port.weights.forEach(h => { if (h.ticker) portByTicker[h.ticker] = (portByTicker[h.ticker] || 0) + h.weight; });
+    document.getElementById('benchTop10Table').innerHTML = `
+        <thead><tr><th>Index constituent</th><th class="num">Index</th><th class="num">Portfolio</th><th class="num">Diff (pts)</th></tr></thead>
+        <tbody>${bstats.top10List.map(h => {
+            const p = portByTicker[h.ticker] || 0;
+            return `<tr><td>${h.name}${p === 0 ? ' <span class="not-held">not held</span>' : ''}</td><td class="num">${fmtPct(h.weight)}</td><td class="num">${fmtPct(p)}</td>${diffCell(p - h.weight)}</tr>`;
+        }).join('')}</tbody>`;
+}
+
+// ---------------------------------------------------------------------------
+// Portfolio review: decision-oriented checks computed from the holdings snapshot
+// only. No prices, no history. Rules are user-editable inputs on the page.
+// ---------------------------------------------------------------------------
+function readRules() {
+    const num = (id, fallback) => {
+        const v = parseFloat(document.getElementById(id).value);
+        return isNaN(v) ? fallback : v;
+    };
+    return {
+        maxPosition: num('ruleMaxPosition', 5),   // % of invested value
+        minPosition: num('ruleMinPosition', 1.5), // % of invested value
+        sectorBand: num('ruleSectorBand', 5),     // +/- points vs benchmark
+        cashTarget: num('ruleCashTarget', 2)      // % of total account
+    };
+}
+
+function createPortfolioReview() {
+    const rules = readRules();
+    const gbp = n => '£' + Math.round(n).toLocaleString('en-GB');
+    const pct = n => n.toFixed(1) + '%';
+    const clean = n => n.replace(/\*\d+|\*R|\(CDI\)|\(Crest Depository Interest\)/g, '').replace(/\s+/g, ' ').trim();
+    const port = portfolioComposition();
+    const invested = port.total;
+    const totalCash = accountSummary.totalCash;
+    const accountTotal = accountSummary.totalValue || (invested + (totalCash || 0));
+
+    const holdings = portfolioData.map(s => ({
+        name: clean(s.name), value: s.value, cost: s.cost, gainLoss: s.gainLoss,
+        gainLossPercent: s.gainLossPercent, sector: s.sector || 'Unclassified',
+        country: s.country || 'Unknown', weight: invested ? s.value / invested * 100 : 0
+    }));
+
+    // ---- Flags ----
+    const flags = [];
+    const usWeight = port.regions['US'] || 0;
+    if (totalCash !== null) {
+        const cashPct = accountTotal ? totalCash / accountTotal * 100 : 0;
+        const excess = totalCash - accountTotal * rules.cashTarget / 100;
+        flags.push({
+            level: cashPct > rules.cashTarget ? 'warn' : 'ok',
+            title: 'Cash',
+            text: `${gbp(totalCash)} cash, ${pct(cashPct)} of the account. Target ${pct(rules.cashTarget)}. ` +
+                  (excess > 0 ? `${gbp(excess)} above target and uninvested.` : 'Within target.')
+        });
+    } else {
+        flags.push({ level: 'info', title: 'Cash', text: 'No "Total cash" line found in this file.' });
+    }
+    flags.push({
+        level: usWeight > 75 ? 'warn' : 'ok',
+        title: 'Currency',
+        text: `${pct(usWeight)} of holdings are US-listed and USD-denominated, unhedged. A 10% move in GBP/USD moves the portfolio about ${pct(usWeight / 10)} regardless of the companies.`
+    });
+    const over = holdings.filter(h => h.weight > rules.maxPosition);
+    flags.push({
+        level: over.length ? 'warn' : 'ok',
+        title: 'Concentration',
+        text: `Largest position ${pct(port.largest)}, top 10 ${pct(port.top10)}, ${port.count} holdings but ${port.effectiveN.toFixed(0)} effective (1/HHI). ` +
+              (over.length ? `${over.length} above the ${pct(rules.maxPosition)} cap: ${over.map(h => h.name).join(', ')}.` : `None above the ${pct(rules.maxPosition)} cap.`)
+    });
+    const small = holdings.filter(h => h.weight < rules.minPosition).sort((a, b) => a.weight - b.weight);
+    const smallWeight = small.reduce((sum, h) => sum + h.weight, 0);
+    flags.push({
+        level: small.length ? 'warn' : 'ok',
+        title: 'Small positions',
+        text: small.length
+            ? `${small.length} holdings under ${pct(rules.minPosition)} each, ${pct(smallWeight)} combined. Too small to affect the outcome; consolidate or size with intent.`
+            : `No holdings under ${pct(rules.minPosition)}.`
+    });
+    document.getElementById('reviewFlags').innerHTML = flags.map(f => `
+        <div class="review-flag ${f.level}">
+            <span class="review-flag-title">${f.title}</span>
+            <span class="review-flag-text">${f.text}</span>
+        </div>`).join('');
+
+    // ---- Small positions table ----
+    document.getElementById('reviewSmallTable').innerHTML = small.length ? `
+        <thead><tr><th>Holding</th><th class="num">Weight</th><th class="num">Value</th><th class="num">P/L</th><th class="num">P/L %</th></tr></thead>
+        <tbody>${small.map(h => `<tr><td>${h.name}</td><td class="num">${pct(h.weight)}</td><td class="num">${gbp(h.value)}</td>
+            <td class="num ${h.gainLoss >= 0 ? 'positive' : 'negative'}">${gbp(h.gainLoss)}</td>
+            <td class="num ${h.gainLoss >= 0 ? 'positive' : 'negative'}">${pct(h.gainLossPercent)}</td></tr>`).join('')}</tbody>`
+        : '<tbody><tr><td class="section-note">None.</td></tr></tbody>';
+
+    // ---- Losers with recovery required ----
+    const losers = holdings.filter(h => h.gainLoss < 0).sort((a, b) => a.gainLoss - b.gainLoss);
+    const totalLoss = losers.reduce((sum, h) => sum + h.gainLoss, 0);
+    document.getElementById('reviewLosersTable').innerHTML = losers.length ? `
+        <thead><tr><th>Holding</th><th class="num">Weight</th><th class="num">Loss</th><th class="num">Loss %</th><th class="num">Rise needed to break even</th></tr></thead>
+        <tbody>${losers.map(h => {
+            const recover = h.value > 0 ? (h.cost / h.value - 1) * 100 : 0;
+            return `<tr><td>${h.name}</td><td class="num">${pct(h.weight)}</td><td class="num negative">${gbp(h.gainLoss)}</td>
+                <td class="num negative">${pct(h.gainLossPercent)}</td><td class="num">${pct(recover)}</td></tr>`;
+        }).join('')}</tbody>
+        <tfoot><tr><td>Total unrealised loss</td><td></td><td class="num negative">${gbp(totalLoss)}</td><td></td><td></td></tr></tfoot>`
+        : '<tbody><tr><td class="section-note">No holdings below cost.</td></tr></tbody>';
+
+    // ---- Sector bets vs selected benchmark, decomposed into the names driving them ----
+    const benchKey = document.getElementById('benchmarkSelect').value;
+    const bench = benchmarks ? benchmarks[benchKey] : null;
+    const betsEl = document.getElementById('reviewBets');
+    if (bench) {
+        const bySector = {};
+        holdings.forEach(h => { (bySector[h.sector] = bySector[h.sector] || []).push(h); });
+        const rows = Array.from(new Set([...Object.keys(bench.sectors), ...Object.keys(bySector)]))
+            .map(name => {
+                const p = (bySector[name] || []).reduce((sum, h) => sum + h.weight, 0);
+                const b = bench.sectors[name] || 0;
+                return { name, p, b, diff: p - b, names: (bySector[name] || []).sort((x, y) => y.weight - x.weight) };
+            })
+            .filter(r => Math.abs(r.diff) > rules.sectorBand)
+            .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+        document.getElementById('reviewBetsNote').textContent =
+            `Sectors more than ${rules.sectorBand} points from ${bench.name} (${bench.as_of}). Each shows the holdings that make up the bet.`;
+        betsEl.innerHTML = rows.length ? rows.map(r => `
+            <div class="review-bet ${r.diff > 0 ? 'over' : 'under'}">
+                <div class="review-bet-head">
+                    <span class="review-bet-name">${r.name}</span>
+                    <span class="review-bet-diff">${r.diff > 0 ? '+' : ''}${r.diff.toFixed(1)} pts</span>
+                    <span class="review-bet-sub">portfolio ${pct(r.p)} vs index ${pct(r.b)}</span>
+                </div>
+                <div class="review-bet-names">${r.names.length
+                    ? r.names.map(h => `<span>${h.name} <em>${pct(h.weight)}</em></span>`).join('')
+                    : '<span class="section-note">Nothing held in this sector.</span>'}</div>
+            </div>`).join('')
+            : `<p class="section-note">No sector deviates by more than ${rules.sectorBand} points.</p>`;
+    } else {
+        betsEl.innerHTML = '<p class="section-note">Benchmark data unavailable.</p>';
+    }
+
+    // ---- Rebalance suggestions from the rules ----
+    const actions = [];
+    over.forEach(h => {
+        const target = invested * rules.maxPosition / 100;
+        actions.push({ kind: 'Trim', name: h.name, amount: h.value - target,
+            why: `${pct(h.weight)} exceeds the ${pct(rules.maxPosition)} single-position cap. In a SIPP there is no capital gains tax on the sale.` });
+    });
+    small.forEach(h => {
+        const target = invested * rules.minPosition / 100;
+        actions.push({ kind: 'Top up or exit', name: h.name, amount: target - h.value,
+            why: `${pct(h.weight)} is below the ${pct(rules.minPosition)} minimum. Top up to ${gbp(target)} if the thesis holds, otherwise release ${gbp(h.value)}.` });
+    });
+    if (bench) {
+        Object.entries(bench.sectors).forEach(([name, b]) => {
+            const p = holdings.filter(h => h.sector === name).reduce((sum, h) => sum + h.weight, 0);
+            if (p - b < -rules.sectorBand) {
+                actions.push({ kind: 'Add exposure', name: name, amount: invested * (b - p) / 100,
+                    why: `Sector is ${(b - p).toFixed(1)} points under ${bench.name}. ${p === 0 ? 'Nothing held.' : ''} A sector ETF or one large-cap name closes it.` });
+            }
+        });
+    }
+    if (totalCash !== null) {
+        const excess = totalCash - accountTotal * rules.cashTarget / 100;
+        if (excess > 0) actions.push({ kind: 'Deploy cash', name: 'Uninvested cash', amount: excess,
+            why: `Above the ${pct(rules.cashTarget)} cash target. Direct it at the underweights above rather than the existing overweights.` });
+    }
+    document.getElementById('reviewActionsTable').innerHTML = actions.length ? `
+        <thead><tr><th>Action</th><th>Holding / sector</th><th class="num">Amount</th><th>Reason</th></tr></thead>
+        <tbody>${actions.map(a => `<tr><td><span class="action-kind">${a.kind}</span></td><td>${a.name}</td><td class="num">${gbp(a.amount)}</td><td class="reason">${a.why}</td></tr>`).join('')}</tbody>`
+        : '<tbody><tr><td class="section-note">Portfolio is within all rules.</td></tr></tbody>';
 }
 
 // Create world map for geographic distribution
@@ -1456,7 +1676,8 @@ function createWorldMap() {
     const countryCoordinates = {
         'US': [39.8283, -98.5795],
         'UK': [55.3781, -3.4360],
-        'EU': [50.8503, 4.3517] // Brussels as EU center
+        'EU': [50.8503, 4.3517], // Brussels as EU center
+        'CH': [46.8182, 8.2275]
     };
 
     portfolioData.forEach(stock => {
@@ -1474,24 +1695,36 @@ function createWorldMap() {
         window.map.remove();
     }
 
+    const worldBounds = L.latLngBounds([[-60, -180], [85, 180]]);
+
     const map = L.map('worldMap', {
-        center: [25, -20],  // Center to show US, UK and EU better
-        zoom: 2,  // Slightly more zoomed for better visibility
         zoomControl: true,
         attributionControl: false,
-        minZoom: 1,
         maxZoom: 5,
-        worldCopyJump: true  // Allows seamless panning across the date line
+        zoomSnap: 0.25,  // Allow fractional zoom so one world copy fits the container width
+        worldCopyJump: false,
+        maxBounds: worldBounds,
+        maxBoundsViscosity: 1.0
     });
+
+    // Base view: one world copy filling the container WIDTH (top/bottom polar
+    // regions are cropped rather than leaving grey margins at the sides).
+    // Fitted zoom becomes the minimum so the user cannot zoom out into repeats/blank space.
+    const fillZoom = map.getBoundsZoom(worldBounds, true);
+    map.setView([30, 0], fillZoom);
+    map.setMinZoom(fillZoom);
 
     window.map = map;
 
-    // Dark tile layer to match the theme
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '',
-        subdomains: 'abcd',
-        maxZoom: 19
+    // OpenStreetMap tiles (no API key). CARTO basemaps now watermark keyless
+    // requests with "API KEY REQUIRED". Darkened via CSS filter in styles.css.
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19,
+        noWrap: true,
+        bounds: [[-85, -180], [85, 180]]
     }).addTo(map);
+    L.control.attribution({ prefix: false }).addTo(map);
 
     // Calculate total for percentages
     const total = Object.values(countryData).reduce((a, b) => a + b, 0);
@@ -1510,7 +1743,7 @@ function createWorldMap() {
             // Create circle marker with better visibility
             L.circleMarker(countryCoordinates[country], {
                 radius: radius,
-                fillColor: country === 'US' ? '#BAFFC9' : country === 'UK' ? '#FFB3BA' : '#BAE1FF',
+                fillColor: {'US': '#BAFFC9', 'UK': '#FFB3BA', 'EU': '#BAE1FF', 'CH': '#FFFFBA'}[country] || '#DDDDDD',
                 color: '#fff',
                 weight: 3,
                 opacity: 1,
@@ -1544,7 +1777,7 @@ function createWorldMap() {
         const item = document.createElement('div');
         item.className = 'legend-item';
         const percentage = ((value / total) * 100).toFixed(1);
-        const colors = {'US': '#BAFFC9', 'UK': '#FFB3BA', 'EU': '#BAE1FF'};
+        const colors = {'US': '#BAFFC9', 'UK': '#FFB3BA', 'EU': '#BAE1FF', 'CH': '#FFFFBA'};
         item.innerHTML = `
             <span class="legend-color" style="background: ${colors[country]}"></span>
             <span>${country} - £${value.toLocaleString('en-GB', {minimumFractionDigits: 2})} (${percentage}%)</span>
@@ -1553,10 +1786,11 @@ function createWorldMap() {
     });
 
     // Add data source summary
-    const sourceCounts = { api: 0, guess: 0, default: 0 };
+    const sourceCounts = { map: 0, api: 0, guess: 0, default: 0 };
     portfolioData.forEach(stock => {
         const countryInfo = stock.countryData || { source: 'Legacy data' };
-        if (countryInfo.source?.includes('Alpha Vantage')) sourceCounts.api++;
+        if (countryInfo.source?.includes('Holdings map')) sourceCounts.map++;
+        else if (countryInfo.source?.includes('Alpha Vantage')) sourceCounts.api++;
         else if (countryInfo.source?.includes('Intelligent guess')) sourceCounts.guess++;
         else sourceCounts.default++;
     });
@@ -1566,8 +1800,9 @@ function createWorldMap() {
     sourceInfo.innerHTML = `
         <div class="source-title">Geographic Data Sources:</div>
         <div class="source-breakdown">
+            ${sourceCounts.map > 0 ? `<span class="source-api">✅ ${sourceCounts.map} from holdings map</span>` : ''}
             ${sourceCounts.api > 0 ? `<span class="source-api">🔗 ${sourceCounts.api} from Alpha Vantage API</span>` : ''}
-            ${sourceCounts.guess > 0 ? `<span class="source-guess">🧠 ${sourceCounts.guess} intelligent guesses</span>` : ''}
+            ${sourceCounts.guess > 0 ? `<span class="source-guess">🧠 ${sourceCounts.guess} name-pattern guesses</span>` : ''}
             ${sourceCounts.default > 0 ? `<span class="source-default">📊 ${sourceCounts.default} US defaults</span>` : ''}
         </div>
     `;
@@ -1772,6 +2007,9 @@ function populateHoldingsTable() {
     const grid = document.getElementById('holdingsGrid');
     grid.innerHTML = '';
 
+    const totalValue = portfolioData.reduce((sum, stock) => sum + stock.value, 0);
+    const fmtGBP = n => n.toLocaleString('en-GB', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
     portfolioData.forEach(stock => {
         const card = document.createElement('div');
         card.className = 'holding-card';
@@ -1779,114 +2017,61 @@ function populateHoldingsTable() {
         const gainClass = stock.gainLoss >= 0 ? 'positive' : 'negative';
         const gainSymbol = stock.gainLoss >= 0 ? '+' : '';
         const percentSymbol = stock.gainLossPercent >= 0 ? '+' : '';
-
-        // Generate key dates HTML using real financial calendar data
-        const keyDates = generateKeyDatesFromCalendar(stock.financialCalendar);
-        const datesHTML = keyDates.map(dateItem => {
-            if (dateItem.isError) {
-                return `
-                    <div class="date-item error">
-                        <span class="date-label">${dateItem.label}:</span>
-                        <span class="date-message">${dateItem.message}</span>
-                    </div>
-                `;
-            } else if (dateItem.isInfo) {
-                return `
-                    <div class="date-item info">
-                        <span class="date-label">${dateItem.label}:</span>
-                        <span class="date-message">${dateItem.message}</span>
-                    </div>
-                `;
-            } else {
-                return `
-                    <div class="date-item ${dateItem.isUpcoming ? 'upcoming' : ''} ${dateItem.type}">
-                        <span class="date-label">${dateItem.label}:</span>
-                        <span class="date-value">${dateItem.date.toLocaleDateString('en-GB', {
-                            day: 'numeric',
-                            month: 'short'
-                        })}</span>
-                    </div>
-                `;
-            }
-        }).join('');
+        const weight = totalValue ? (stock.value / totalValue) * 100 : 0;
+        const sectorSource = stock.gicsSector?.source || '';
+        const countrySource = stock.countryData?.source || '';
+        const isApi = src => src.includes('Alpha Vantage') || src.includes('Holdings map');
 
         card.innerHTML = `
             <div class="holding-header">
                 <div class="holding-name">${stock.name.replace(/\*\d+/g, '').trim()}</div>
-                <div class="holding-sector">${stock.sector}</div>
+                <div class="holding-meta">
+                    <span class="holding-sector" title="${sectorSource}">${stock.sector}${isApi(sectorSource) ? '' : ' (guess)'}</span>
+                    <span class="holding-country" title="${countrySource}">${stock.country}${isApi(countrySource) ? '' : ' (guess)'}</span>
+                </div>
+            </div>
+
+            <div class="holding-figures">
+                <div class="figure">
+                    <span class="figure-label">Value</span>
+                    <span class="figure-value">£${fmtGBP(stock.value)}</span>
+                </div>
+                <div class="figure">
+                    <span class="figure-label">% of Portfolio</span>
+                    <span class="figure-value">${weight.toFixed(2)}%</span>
+                </div>
+                <div class="figure">
+                    <span class="figure-label">Cost</span>
+                    <span class="figure-value">£${fmtGBP(stock.cost)}</span>
+                </div>
             </div>
 
             <div class="holding-performance">
-                <div class="holding-gain ${gainClass}">
-                    ${gainSymbol}£${stock.gainLoss.toLocaleString('en-GB', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                </div>
-                <div class="holding-percent ${gainClass}">
-                    ${percentSymbol}${stock.gainLossPercent.toFixed(1)}%
-                </div>
-            </div>
-
-            <div class="holding-dates">
-                <h4>Key Dates</h4>
-                <div class="dates-row">
-                    ${datesHTML}
-                </div>
-            </div>
-
-            <div class="sentiment-section">
-                <div class="sentiment-item">
-                    <h4>Stock Sentiment</h4>
-                    <div class="sentiment-score">
-                        ${generateSentimentDisplay(stock.stockSentiment)}
-                    </div>
-                    <div class="sentiment-label">${getSentimentLabel(stock.stockSentiment.score)}</div>
-                    <div class="sentiment-source">${stock.stockSentiment.source}</div>
-                </div>
-                <div class="sentiment-item">
-                    <h4>Sector Sentiment</h4>
-                    <div class="sentiment-score">
-                        ${generateSentimentDisplay(stock.sectorSentiment)}
-                    </div>
-                    <div class="sentiment-label">${getSentimentLabel(stock.sectorSentiment.score)}</div>
-                    <div class="sentiment-source">${stock.sectorSentiment.source}</div>
-                </div>
+                <div class="holding-gain ${gainClass}">${gainSymbol}£${fmtGBP(stock.gainLoss)}</div>
+                <div class="holding-percent ${gainClass}">${percentSymbol}${stock.gainLossPercent.toFixed(1)}%</div>
             </div>
         `;
 
-        // Store data for sorting
+        // Store data for sorting/filtering
         card.dataset.name = stock.name;
         card.dataset.gain = stock.gainLossPercent;
         card.dataset.value = stock.value;
-        card.dataset.stockSentiment = stock.stockSentiment?.score || 50; // Default to neutral if no data
-        card.dataset.sectorSentiment = stock.sectorSentiment?.score || 50; // Default to neutral if no data
-        card.dataset.nextEventDate = getNextEventDate(stock.financialCalendar).getTime();
-
-        // Add urgency class for events in the next 7 days
-        const nextEventDate = getNextEventDate(stock.financialCalendar);
-        const today = new Date();
-        const daysDifference = (nextEventDate - today) / (1000 * 60 * 60 * 24);
-
-        if (daysDifference <= 7 && daysDifference >= 0) {
-            card.classList.add('urgent-event');
-        } else if (daysDifference <= 14 && daysDifference >= 0) {
-            card.classList.add('upcoming-event');
-        }
+        card.dataset.weight = weight;
+        card.dataset.sector = stock.sector || '';
+        card.dataset.country = stock.country || '';
 
         grid.appendChild(card);
     });
 
-    // Apply default sort by upcoming events
     applyDefaultSort();
 }
 
-// Apply default sort order (soonest financial events first)
 function applyDefaultSort() {
     const grid = document.getElementById('holdingsGrid');
     const cards = Array.from(grid.children);
 
-    // Sort by next event date (earliest first)
-    cards.sort((a, b) => {
-        return parseInt(a.dataset.nextEventDate) - parseInt(b.dataset.nextEventDate);
-    });
+    // Sort by value (largest first)
+    cards.sort((a, b) => parseFloat(b.dataset.value) - parseFloat(a.dataset.value));
 
     // Clear and re-append sorted cards
     grid.innerHTML = '';
@@ -1903,8 +2088,8 @@ function setupTableControls() {
         const cards = document.querySelectorAll('.holding-card');
 
         cards.forEach(card => {
-            const stockName = card.dataset.name.toLowerCase();
-            card.style.display = stockName.includes(searchTerm) ? 'block' : 'none';
+            const haystack = `${card.dataset.name} ${card.dataset.sector} ${card.dataset.country}`.toLowerCase();
+            card.style.display = haystack.includes(searchTerm) ? 'flex' : 'none';
         });
     });
 
@@ -1915,19 +2100,18 @@ function setupTableControls() {
 
         cards.sort((a, b) => {
             switch(sortBy) {
-                case 'upcoming-events':
-                    // Sort by next event date (earliest first)
-                    return parseInt(a.dataset.nextEventDate) - parseInt(b.dataset.nextEventDate);
                 case 'value':
                     return parseFloat(b.dataset.value) - parseFloat(a.dataset.value);
                 case 'gain':
                     return parseFloat(b.dataset.gain) - parseFloat(a.dataset.gain);
                 case 'name':
                     return a.dataset.name.localeCompare(b.dataset.name);
-                case 'sentiment':
-                    return parseInt(b.dataset.stockSentiment) - parseInt(a.dataset.stockSentiment);
-                case 'sector-sentiment':
-                    return parseInt(b.dataset.sectorSentiment) - parseInt(a.dataset.sectorSentiment);
+                case 'sector':
+                    return a.dataset.sector.localeCompare(b.dataset.sector) ||
+                           parseFloat(b.dataset.value) - parseFloat(a.dataset.value);
+                case 'country':
+                    return a.dataset.country.localeCompare(b.dataset.country) ||
+                           parseFloat(b.dataset.value) - parseFloat(a.dataset.value);
                 default:
                     return 0;
             }
@@ -1955,8 +2139,21 @@ document.getElementById('fileUpload').addEventListener('change', (e) => {
 
 // Event handlers
 document.addEventListener('DOMContentLoaded', async () => {
-    // Load API keys first
+    // Load static holdings classification and benchmark data, then API keys
+    await Promise.all([loadHoldingsMap(), loadBenchmarks()]);
     await loadAPIKeys();
+
+    document.getElementById('benchmarkSelect').addEventListener('change', () => {
+        if (portfolioData.length > 0) {
+            createBenchmarkComparison();
+            createPortfolioReview();
+        }
+    });
+    ['ruleMaxPosition', 'ruleMinPosition', 'ruleSectorBand', 'ruleCashTarget'].forEach(id => {
+        document.getElementById(id).addEventListener('input', () => {
+            if (portfolioData.length > 0) createPortfolioReview();
+        });
+    });
 
     // Initialize with file selection
     initializeFileSelection();
@@ -1998,20 +2195,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    // Upload button inside the file-selection modal reuses the hidden file input
+    document.getElementById('uploadFromModal').addEventListener('click', () => {
+        document.getElementById('fileUpload').click();
+    });
+
     // File upload handler remains the same
     document.getElementById('fileUpload').addEventListener('change', (e) => {
         const file = e.target.files[0];
-        if (file && file.type === 'text/csv') {
+        if (!file) return;
+        if (!/\.csv$/i.test(file.name)) {
+            alert(`"${file.name}" is not a .csv file. Export the HL account summary as CSV and try again.`);
+            return;
+        }
+        {
             const reader = new FileReader();
             reader.onload = async (event) => {
                 // Parse uploaded CSV data directly
                 console.log('Processing uploaded file:', file.name);
                 currentFile = 'Uploaded: ' + file.name;
                 updateCurrentFileDisplay();
+                document.getElementById('fileSelectModal').classList.remove('show');
                 await processCSVText(event.target.result);
             };
             reader.readAsText(file);
         }
+        e.target.value = '';  // allow the same file to be chosen again
     });
 });
 
@@ -2023,6 +2232,20 @@ async function processCSVText(csvText) {
 
     const data = [];
     let startParsing = false;
+
+    // Account-level lines above the holdings table (HL account summary header)
+    accountSummary = { stockValue: null, totalCash: null, availableToInvest: null, totalValue: null };
+    const headerNumber = (label) => {
+        const line = lines.find(l => l.startsWith(label));
+        if (!line) return null;
+        const m = line.match(/"([^"]*)"/);
+        const n = m ? parseFloat(m[1].replace(/[^0-9.\-]/g, '')) : NaN;
+        return isNaN(n) ? null : n;
+    };
+    accountSummary.stockValue = headerNumber('Stock value:');
+    accountSummary.totalCash = headerNumber('Total cash:');
+    accountSummary.availableToInvest = headerNumber('Amount available to invest:');
+    accountSummary.totalValue = headerNumber('Total value:');
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];

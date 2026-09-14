@@ -1,4 +1,29 @@
-# Pension Evaluation Dashboard - Project Guidelines
+# Pension Evaluation Dashboard
+
+Pension portfolio analyzer for UK pension holdings.
+
+## Overview
+
+Analyzes pension portfolio from CSV. Shows holdings, GICS sectors, gains/losses.
+
+## Tech Stack
+
+- Python
+- CSV parsing
+- HTTP server for web interface
+
+## Port
+
+3020
+
+## Strategic Status
+
+**Classification:** Personal / Internal Tool
+**Decision:** Keep for personal use only - not for commercialization
+
+Narrow market (UK pension holders), strong free competition (Vanguard, Fidelity, Hargreaves Lansdown), multiple API dependencies.
+
+---
 
 ## Data Integrity Standards
 

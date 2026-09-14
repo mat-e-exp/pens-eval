@@ -25,3 +25,5 @@ Thumbs.db
 # Python cache
 __pycache__/
 *.pyc
+# Holdings classification table (enumerates portfolio holdings)
+data/holdings-map.json

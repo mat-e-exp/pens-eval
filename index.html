@@ -17,6 +17,7 @@
             <div id="fileList" class="file-list"></div>
             <div class="modal-buttons">
                 <button id="loadSelectedFile" class="btn-primary">Load Selected File</button>
+                <button id="uploadFromModal" class="btn-secondary">Upload a CSV…</button>
             </div>
         </div>
     </div>
@@ -49,44 +50,79 @@
         <div class="map-section">
             <div class="chart-container map-container">
                 <h2>Geographic Distribution</h2>
-                <div id="worldMap" style="height: 400px; border-radius: 10px;"></div>
+                <div id="worldMap" style="height: 650px; border-radius: 10px;"></div>
                 <div class="legend" id="countryLegend"></div>
             </div>
         </div>
 
-        <!-- Sector Allocation Chart - Full Width -->
+        <!-- Sector Allocation - tile grid, one tile per sector -->
         <div class="sector-section">
             <div class="chart-container sector-container">
                 <h2>Sector Allocation</h2>
-                <div class="sector-interactive">
-                    <div class="sector-chart-wrapper">
-                        <canvas id="sectorChart"></canvas>
-                        <div class="sector-data-sources" id="sectorDataSources"></div>
+                <p class="section-note">Tiles ordered by weight. Click a sector name to collapse or expand its holdings.</p>
+                <div class="sector-grid" id="sectorGrid"></div>
+                <div class="sector-data-sources" id="sectorDataSources"></div>
+            </div>
+        </div>
+
+        <!-- Benchmark Comparison -->
+        <div class="benchmark-section">
+            <div class="chart-container">
+                <h2>Benchmark Comparison</h2>
+                <div class="benchmark-controls">
+                    <label for="benchmarkSelect">Benchmark</label>
+                    <select id="benchmarkSelect" class="sort-select">
+                        <option value="msci_world">MSCI World</option>
+                        <option value="sp500">S&amp;P 500</option>
+                    </select>
+                    <span class="section-note" id="benchmarkMeta"></span>
+                </div>
+                <div class="bench-stats" id="benchStats"></div>
+                <div class="bench-grid">
+                    <div class="bench-panel">
+                        <h3>Sector weights</h3>
+                        <div class="sector-table-wrapper"><table class="bench-table" id="benchSectorTable"></table></div>
                     </div>
-                    <div class="sector-details" id="sectorDetails">
-                        <div class="sector-info">
-                            <h3 id="sectorName">Hover over a sector</h3>
-                            <div class="sector-stats">
-                                <div class="stat-item">
-                                    <span class="stat-label">Portfolio %</span>
-                                    <span class="sector-percentage" id="sectorPercentage"></span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-label">Total Value</span>
-                                    <span class="sector-value" id="sectorValue"></span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-label">Profit/Loss</span>
-                                    <span class="sector-gain" id="sectorGain"></span>
-                                    <span class="sector-gain-percent" id="sectorGainPercent"></span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="sector-stocks" id="sectorStocks">
-                            <p class="hover-prompt">Hover over a sector to see stocks</p>
-                        </div>
+                    <div class="bench-panel">
+                        <h3>Region weights</h3>
+                        <div class="sector-table-wrapper"><table class="bench-table" id="benchRegionTable"></table></div>
+                        <h3>Index top 10: what the portfolio holds</h3>
+                        <div class="sector-table-wrapper"><table class="bench-table" id="benchTop10Table"></table></div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Portfolio Review -->
+        <div class="review-section">
+            <div class="chart-container">
+                <h2>Portfolio Review</h2>
+                <p class="section-note">Decision checks from the holdings snapshot only. Adjust the rules to your own policy; every table updates.</p>
+                <div class="review-rules">
+                    <label>Max single position <input type="number" id="ruleMaxPosition" value="5" step="0.5" min="0"> %</label>
+                    <label>Min position <input type="number" id="ruleMinPosition" value="1.5" step="0.5" min="0"> %</label>
+                    <label>Sector band vs index ± <input type="number" id="ruleSectorBand" value="5" step="1" min="0"> pts</label>
+                    <label>Cash target <input type="number" id="ruleCashTarget" value="2" step="1" min="0"> % of account</label>
+                </div>
+                <div class="review-flags" id="reviewFlags"></div>
+
+                <div class="bench-grid">
+                    <div class="bench-panel">
+                        <h3>Small positions</h3>
+                        <div class="sector-table-wrapper"><table class="bench-table" id="reviewSmallTable"></table></div>
+                    </div>
+                    <div class="bench-panel">
+                        <h3>Holdings below cost</h3>
+                        <div class="sector-table-wrapper"><table class="bench-table" id="reviewLosersTable"></table></div>
+                    </div>
+                </div>
+
+                <h3 class="review-h3">Sector bets</h3>
+                <p class="section-note" id="reviewBetsNote"></p>
+                <div class="review-bets" id="reviewBets"></div>
+
+                <h3 class="review-h3">Suggested actions</h3>
+                <div class="sector-table-wrapper"><table class="bench-table" id="reviewActionsTable"></table></div>
             </div>
         </div>
 
@@ -118,24 +154,23 @@
             </div>
         </div>
 
-        <!-- Holdings Analysis -->
-        <div class="holdings-section">
-            <h2>Portfolio Holdings Analysis</h2>
+        <!-- Holdings Analysis (collapsed by default) -->
+        <details class="holdings-section" id="holdingsSection">
+            <summary><h2>Portfolio Holdings Analysis</h2><span class="summary-hint">click to expand</span></summary>
             <div class="table-controls">
-                <input type="text" id="searchInput" placeholder="Search holdings..." class="search-input">
+                <input type="text" id="searchInput" placeholder="Search holdings, sector or country..." class="search-input">
                 <select id="sortSelect" class="sort-select">
-                    <option value="upcoming-events">Sort by Upcoming Events</option>
-                    <option value="gain">Sort by Gain %</option>
                     <option value="value">Sort by Value</option>
+                    <option value="gain">Sort by Gain %</option>
                     <option value="name">Sort by Name</option>
-                    <option value="sentiment">Sort by Stock Sentiment</option>
-                    <option value="sector-sentiment">Sort by Sector Sentiment</option>
+                    <option value="sector">Sort by Sector</option>
+                    <option value="country">Sort by Country</option>
                 </select>
             </div>
             <div class="holdings-grid" id="holdingsGrid">
                 <!-- Holdings cards will be generated here -->
             </div>
-        </div>
+        </details>
 
         <!-- Data Upload -->
         <div class="upload-section">
