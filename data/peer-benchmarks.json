@@ -1,0 +1,277 @@
+{
+ "notes": "Peer distributions for the Drawdown Sustainability section. Published figures only, transcribed from the source files named below. Refresh by hand when the FCA publishes the next retirement income market data (September) and when the ONS publishes the next Wealth and Assets Survey pension wealth tables. FCA figures count plans, not people; pot size excludes tax-free cash. ONS figures are individuals and include defined benefit pensions in payment valued as capitalised wealth.",
+ "fca": {
+  "name": "FCA Retirement income market data 2024/25",
+  "period": "April 2024 to March 2025",
+  "published": "2025-09-16",
+  "source": "https://www.fca.org.uk/publication/data/retirement-income-underlying-data-2024-25.xlsx, sheet '2018-25 Data Tables'",
+  "pot_bands": {
+   "lt10k": [
+    0,
+    10000
+   ],
+   "10k_29k": [
+    10000,
+    30000
+   ],
+   "30k_49k": [
+    30000,
+    50000
+   ],
+   "50k_99k": [
+    50000,
+    100000
+   ],
+   "100k_249k": [
+    100000,
+    250000
+   ],
+   "250k_plus": [
+    250000,
+    null
+   ]
+  },
+  "pot_band_labels": {
+   "lt10k": "Under £10k",
+   "10k_29k": "£10k–29k",
+   "30k_49k": "£30k–49k",
+   "50k_99k": "£50k–99k",
+   "100k_249k": "£100k–249k",
+   "250k_plus": "£250k+"
+  },
+  "rate_bands": {
+   "lt2": [
+    0,
+    2
+   ],
+   "2_3.99": [
+    2,
+    4
+   ],
+   "4_5.99": [
+    4,
+    6
+   ],
+   "6_7.99": [
+    6,
+    8
+   ],
+   "8_plus": [
+    8,
+    null
+   ]
+  },
+  "rate_band_labels": {
+   "lt2": "Under 2%",
+   "2_3.99": "2–3.99%",
+   "4_5.99": "4–5.99%",
+   "6_7.99": "6–7.99%",
+   "8_plus": "8%+"
+  },
+  "age_bands": [
+   "Under 55",
+   "55-64",
+   "65-74",
+   "75+"
+  ],
+  "entering_drawdown": {
+   "table": "Table 3: pots that entered drawdown (not fully exhausted), by pot size and customer age; two half-years summed",
+   "by_pot_band": {
+    "lt10k": {
+     "Under 55": 851,
+     "55-64": 22288,
+     "65-74": 9149,
+     "75+": 883,
+     "All ages": 33171
+    },
+    "10k_29k": {
+     "Under 55": 360,
+     "55-64": 49456,
+     "65-74": 17835,
+     "75+": 1712,
+     "All ages": 69363
+    },
+    "30k_49k": {
+     "Under 55": 297,
+     "55-64": 34804,
+     "65-74": 13458,
+     "75+": 1511,
+     "All ages": 50070
+    },
+    "50k_99k": {
+     "Under 55": 482,
+     "55-64": 47322,
+     "65-74": 20722,
+     "75+": 2631,
+     "All ages": 71157
+    },
+    "100k_249k": {
+     "Under 55": 627,
+     "55-64": 41554,
+     "65-74": 22086,
+     "75+": 3420,
+     "All ages": 67687
+    },
+    "250k_plus": {
+     "Under 55": 537,
+     "55-64": 36079,
+     "65-74": 18205,
+     "75+": 3723,
+     "All ages": 58544
+    }
+   }
+  },
+  "regular_withdrawal_rate_by_pot": {
+   "table": "Table 8: plans with regular partial withdrawals, by annual rate of withdrawal and pot size",
+   "by_pot_band": {
+    "lt10k": {
+     "lt2": 2276,
+     "2_3.99": 1411,
+     "4_5.99": 1390,
+     "6_7.99": 1240,
+     "8_plus": 32037
+    },
+    "10k_29k": {
+     "lt2": 2589,
+     "2_3.99": 3875,
+     "4_5.99": 6005,
+     "6_7.99": 5591,
+     "8_plus": 59818
+    },
+    "30k_49k": {
+     "lt2": 2826,
+     "2_3.99": 5388,
+     "4_5.99": 7814,
+     "6_7.99": 7442,
+     "8_plus": 41666
+    },
+    "50k_99k": {
+     "lt2": 7521,
+     "2_3.99": 13127,
+     "4_5.99": 18285,
+     "6_7.99": 15034,
+     "8_plus": 56861
+    },
+    "100k_249k": {
+     "lt2": 16982,
+     "2_3.99": 24698,
+     "4_5.99": 29254,
+     "6_7.99": 21930,
+     "8_plus": 48674
+    },
+    "250k_plus": {
+     "lt2": 34357,
+     "2_3.99": 41413,
+     "4_5.99": 31566,
+     "6_7.99": 16931,
+     "8_plus": 20490
+    }
+   }
+  },
+  "regular_withdrawal_rate_by_age": {
+   "table": "Table 7: plans with regular partial withdrawals, by annual rate of withdrawal and age band",
+   "by_age_band": {
+    "Under 55": {
+     "lt2": 411,
+     "2_3.99": 346,
+     "4_5.99": 266,
+     "6_7.99": 204,
+     "8_plus": 1181
+    },
+    "55-64": {
+     "lt2": 21345,
+     "2_3.99": 28421,
+     "4_5.99": 26138,
+     "6_7.99": 18693,
+     "8_plus": 92905
+    },
+    "65-74": {
+     "lt2": 33188,
+     "2_3.99": 46341,
+     "4_5.99": 51154,
+     "6_7.99": 35345,
+     "8_plus": 117096
+    },
+    "75-84": {
+     "lt2": 10769,
+     "2_3.99": 13820,
+     "4_5.99": 15902,
+     "6_7.99": 13142,
+     "8_plus": 43958
+    },
+    "85+": {
+     "lt2": 850,
+     "2_3.99": 972,
+     "4_5.99": 929,
+     "6_7.99": 748,
+     "8_plus": 4367
+    }
+   }
+  }
+ },
+ "ons": {
+  "name": "ONS Wealth and Assets Survey, pension wealth tables, Table 6.9",
+  "period": "April 2020 to March 2022",
+  "published": "2025-01-24",
+  "source": "https://www.ons.gov.uk/peoplepopulationandcommunity/personalandhouseholdfinances/incomeandwealth/datasets/pensionwealthwealthingreatbritain (pensionwealthtables.xlsx, Table 6.9, all persons)",
+  "measure": "Private pension wealth in payment, individuals with any such pension, Great Britain. Includes defined benefit pensions valued as capitalised wealth. Series break at 2020-22.",
+  "in_payment_by_age": {
+   "Under 50": {
+    "pct_with": null,
+    "p25": null,
+    "p50": null,
+    "p75": null,
+    "weighted_n": null
+   },
+   "50-54": {
+    "pct_with": 2,
+    "p25": 85900,
+    "p50": 209500,
+    "p75": 343700,
+    "weighted_n": 101000
+   },
+   "55-59": {
+    "pct_with": 12,
+    "p25": 85700,
+    "p50": 214800,
+    "p75": 393600,
+    "weighted_n": 526000
+   },
+   "60-64": {
+    "pct_with": 35,
+    "p25": 78000,
+    "p50": 201900,
+    "p75": 392800,
+    "weighted_n": 1341000
+   },
+   "65-69": {
+    "pct_with": 58,
+    "p25": 69500,
+    "p50": 164100,
+    "p75": 307100,
+    "weighted_n": 1866000
+   },
+   "70-74": {
+    "pct_with": 62,
+    "p25": 45500,
+    "p50": 123400,
+    "p75": 239400,
+    "weighted_n": 2002000
+   },
+   "75+": {
+    "pct_with": 67,
+    "p25": 24200,
+    "p50": 59200,
+    "p75": 133000,
+    "weighted_n": 3544000
+   },
+   "All persons": {
+    "pct_with": 19,
+    "p25": 41200,
+    "p50": 109700,
+    "p75": 240400,
+    "weighted_n": 9435000
+   }
+  }
+ }
+}

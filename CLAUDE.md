@@ -85,6 +85,11 @@ When real data cannot be accessed:
 - ✅ Annual withdrawal is user input (not in the HL CSV); stored in localStorage for convenience.
 - ❌ No return forecasts or projections. Section is arithmetic on snapshot + input + CPI only.
 
+**Peer Distributions (Drawdown Sustainability → Peer comparison)**
+- ✅ `data/peer-benchmarks.json`: FCA Retirement income market data (Tables 3, 7, 8; plans, not people) and ONS Wealth and Assets Survey Table 6.9 (pension wealth in payment, P25/median/P75 by age; includes DB as capital). Transcribed from the published xlsx files named in the JSON; `period`/`published`/`source` per block.
+- ✅ Age band is user input, stored in localStorage. Never inferred.
+- ❌ Bands only. Never interpolate an exact percentile. No secondary-site figures (they conflict with the primary tables).
+
 **Benchmark Composition (Benchmark Comparison section)**
 - ✅ Static index snapshots in `data/benchmarks.json`, hand-refreshed from the sources named in the file (`as_of` per benchmark).
 - ❌ No benchmark return figures. Composition only.

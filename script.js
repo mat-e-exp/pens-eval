@@ -68,6 +68,20 @@ const ONS_CPI_URL = 'https://www.ons.gov.uk/economy/inflationandpriceindices/tim
 let cpi = null;   // { rate, period, releaseDate, nextRelease, title }
 let cpiError = null;
 
+// Peer distributions (data/peer-benchmarks.json): FCA retirement income market
+// data and ONS Wealth and Assets Survey, transcribed from the published files.
+let peers = null;
+
+async function loadPeerBenchmarks() {
+    try {
+        const response = await fetch('data/peer-benchmarks.json?t=' + Date.now());
+        if (!response.ok) { console.warn('peer-benchmarks.json not found; peer comparison disabled'); return; }
+        peers = await response.json();
+    } catch (error) {
+        console.warn('Error loading peer benchmarks:', error);
+    }
+}
+
 async function loadCPI() {
     try {
         const response = await fetch(ONS_CPI_URL);
@@ -1706,6 +1720,7 @@ function createPortfolioReview() {
 // CPI print. Arithmetic on real inputs only; no return assumptions.
 // ---------------------------------------------------------------------------
 const WITHDRAWAL_STORAGE_KEY = 'pensEval.annualWithdrawal';
+const AGE_BAND_STORAGE_KEY = 'pensEval.ageBand';
 
 function readDrawdownRules() {
     const num = (id, fallback) => {
@@ -1809,6 +1824,134 @@ function createDrawdownReview() {
         `Account: HL export dated ${snapshotDate}. ` +
         (cpi ? `Inflation: ONS ${cpi.title}, ${cpi.period} = ${pct(cpi.rate)}, released ${cpi.releaseDate || 'n/a'}, next release ${cpi.nextRelease || 'n/a'}. ` : '') +
         (W !== null ? `Withdrawal: ${gbp(W)} a year, your input (stored in this browser only).` : '');
+
+    createPeerComparison(accountTotal, W);
+}
+
+// ---------------------------------------------------------------------------
+// Peer comparison: where this account sits against published distributions.
+// FCA: pots entering drawdown by size (Table 3) and regular withdrawal rate by
+// pot size (Table 8) and by age (Table 7), 2024/25. ONS WAS: private pension
+// wealth in payment P25/median/P75 by age, 2020-22. Bands only; the sources do
+// not publish exact percentiles.
+// ---------------------------------------------------------------------------
+const FCA_AGE_FOR_ONS_BAND = { '50-54': 'Under 55', '55-59': '55-64', '60-64': '55-64', '65-69': '65-74', '70-74': '65-74', '75+': '75+' };
+const FCA_TABLE7_AGE_FOR_ONS_BAND = { '50-54': 'Under 55', '55-59': '55-64', '60-64': '55-64', '65-69': '65-74', '70-74': '65-74', '75+': '75-84' };
+
+function bandKeyFor(value, bands) {
+    for (const [key, [lo, hi]] of Object.entries(bands)) {
+        if (value >= lo && (hi === null || value < hi)) return key;
+    }
+    return null;
+}
+
+function createPeerComparison(accountTotal, W) {
+    const gbp = n => '£' + Math.round(n).toLocaleString('en-GB');
+    const pct = n => n.toFixed(1) + '%';
+    const noteEl = document.getElementById('ddPeerNote');
+    const flagsEl = document.getElementById('ddPeerFlags');
+    const potEl = document.getElementById('ddPeerPotTable');
+    const rateEl = document.getElementById('ddPeerRateTable');
+    const ageRateEl = document.getElementById('ddPeerAgeRateTable');
+    const onsEl = document.getElementById('ddPeerOnsTable');
+    const srcEl = document.getElementById('ddPeerSources');
+    if (!peers) {
+        noteEl.textContent = 'Peer data unavailable (data/peer-benchmarks.json).';
+        [flagsEl, potEl, rateEl, ageRateEl, onsEl].forEach(el => el.innerHTML = '');
+        srcEl.textContent = '';
+        return;
+    }
+    const fca = peers.fca, ons = peers.ons;
+    const ageBand = document.getElementById('ddAgeBand').value || null;
+    const fcaAge = ageBand ? FCA_AGE_FOR_ONS_BAND[ageBand] : 'All ages';
+    const fcaAge7 = ageBand ? FCA_TABLE7_AGE_FOR_ONS_BAND[ageBand] : null;
+    const potKeys = Object.keys(fca.pot_bands);
+    const rateKeys = Object.keys(fca.rate_bands);
+    const potKey = bandKeyFor(accountTotal, fca.pot_bands);
+    const potLabel = fca.pot_band_labels[potKey];
+    const rate = W !== null && accountTotal ? W / accountTotal * 100 : null;
+    const rateKey = rate !== null ? bandKeyFor(rate, fca.rate_bands) : null;
+
+    noteEl.textContent = `Comparator for pot size is the total account value ${gbp(accountTotal)} (FCA pot sizes exclude tax-free cash already taken). ` +
+        (ageBand ? `Age band ${ageBand}; FCA tables use ${fcaAge}.` : 'Select an age band to narrow the FCA figures and show the ONS row for your age.');
+
+    // Helper: position of a band within a distribution {key: count}
+    const position = (dist, keys, key) => {
+        const total = keys.reduce((s, k) => s + (dist[k] || 0), 0);
+        const idx = keys.indexOf(key);
+        const below = keys.slice(0, idx).reduce((s, k) => s + (dist[k] || 0), 0);
+        const inBand = dist[key] || 0;
+        return { total, below: below / total * 100, inBand: inBand / total * 100, above: (total - below - inBand) / total * 100 };
+    };
+
+    const flags = [];
+
+    // ---- Pot size vs pots entering drawdown ----
+    const entering = fca.entering_drawdown.by_pot_band;
+    const potDist = {}; potKeys.forEach(k => potDist[k] = entering[k][fcaAge]);
+    const potPos = position(potDist, potKeys, potKey);
+    flags.push({ level: 'info', title: 'Pot size vs peers',
+        text: `${gbp(accountTotal)} is in the ${potLabel} band. Of ${potPos.total.toLocaleString('en-GB')} pots entering drawdown in ${fca.period}${ageBand ? `, age ${fcaAge}` : ''}: ` +
+              `${pct(potPos.below)} were smaller than this band, ${pct(potPos.inBand)} in it, ${pct(potPos.above)} larger.` });
+    potEl.innerHTML = `
+        <thead><tr><th>Pot band</th><th class="num">Pots</th><th class="num">Share</th><th class="num">Cumulative</th></tr></thead>
+        <tbody>${(() => { let cum = 0; return potKeys.map(k => { const n = potDist[k]; const sh = n / potPos.total * 100; cum += sh;
+            return `<tr class="${k === potKey ? 'peer-you' : ''}"><td>${fca.pot_band_labels[k]}${k === potKey ? ' ◀ you' : ''}</td><td class="num">${n.toLocaleString('en-GB')}</td><td class="num">${pct(sh)}</td><td class="num">${pct(cum)}</td></tr>`; }).join(''); })()}</tbody>`;
+
+    // ---- Withdrawal rate vs pots of the same size ----
+    const rateByPot = fca.regular_withdrawal_rate_by_pot.by_pot_band[potKey];
+    if (rateKey !== null) {
+        const rp = position(rateByPot, rateKeys, rateKey);
+        flags.push({ level: rp.below > 50 ? 'warn' : 'ok', title: 'Withdrawal rate vs pots your size',
+            text: `${pct(rate)} a year is in the ${fca.rate_band_labels[rateKey]} band. Of ${rp.total.toLocaleString('en-GB')} ${potLabel} pots in regular drawdown: ` +
+                  `${pct(rp.below)} draw less than this band, ${pct(rp.inBand)} the same, ${pct(rp.above)} more.` +
+                  (rp.below > 50 ? ' You draw faster than most pots of this size.' : '') });
+    } else {
+        flags.push({ level: 'info', title: 'Withdrawal rate vs pots your size', text: 'Enter an annual withdrawal above to place it in the distribution.' });
+    }
+    const rateTable = (dist, youKey) => {
+        const total = rateKeys.reduce((s, k) => s + (dist[k] || 0), 0); let cum = 0;
+        return `<thead><tr><th>Annual rate</th><th class="num">Plans</th><th class="num">Share</th><th class="num">Cumulative</th></tr></thead>
+        <tbody>${rateKeys.map(k => { const n = dist[k] || 0; const sh = n / total * 100; cum += sh;
+            return `<tr class="${k === youKey ? 'peer-you' : ''}"><td>${fca.rate_band_labels[k]}${k === youKey ? ' ◀ you' : ''}</td><td class="num">${n.toLocaleString('en-GB')}</td><td class="num">${pct(sh)}</td><td class="num">${pct(cum)}</td></tr>`; }).join('')}</tbody>`;
+    };
+    rateEl.innerHTML = rateTable(rateByPot, rateKey);
+
+    // ---- Withdrawal rate vs same age band (Table 7) ----
+    if (fcaAge7) {
+        const rateByAge = fca.regular_withdrawal_rate_by_age.by_age_band[fcaAge7];
+        ageRateEl.innerHTML = `<caption class="section-note">Age ${fcaAge7}, all pot sizes</caption>` + rateTable(rateByAge, rateKey);
+        if (rateKey !== null) {
+            const ra = position(rateByAge, rateKeys, rateKey);
+            flags.push({ level: 'info', title: 'Withdrawal rate vs your age band',
+                text: `Of ${ra.total.toLocaleString('en-GB')} plans in regular drawdown aged ${fcaAge7}: ${pct(ra.below)} draw less than your band, ${pct(ra.inBand)} the same, ${pct(ra.above)} more.` });
+        }
+    } else {
+        ageRateEl.innerHTML = '<tbody><tr><td class="section-note">Select an age band.</td></tr></tbody>';
+    }
+
+    // ---- ONS pension wealth in payment by age ----
+    const onsRows = Object.entries(ons.in_payment_by_age).filter(([age, v]) => age !== 'Under 50' && v.p50 !== null);
+    const quartile = v => accountTotal < v.p25 ? 'below P25' : accountTotal < v.p50 ? 'P25–median' : accountTotal < v.p75 ? 'median–P75' : 'above P75';
+    onsEl.innerHTML = `
+        <thead><tr><th>Age</th><th class="num">P25</th><th class="num">Median</th><th class="num">P75</th><th>You</th></tr></thead>
+        <tbody>${onsRows.map(([age, v]) => `<tr class="${age === ageBand ? 'peer-you' : ''}"><td>${age}${age === ageBand ? ' ◀ you' : ''}</td>
+            <td class="num">${gbp(v.p25)}</td><td class="num">${gbp(v.p50)}</td><td class="num">${gbp(v.p75)}</td><td>${quartile(v)}</td></tr>`).join('')}</tbody>`;
+    if (ageBand && ons.in_payment_by_age[ageBand] && ons.in_payment_by_age[ageBand].p50 !== null) {
+        const v = ons.in_payment_by_age[ageBand];
+        flags.push({ level: 'info', title: 'Pension wealth vs your age band (ONS)',
+            text: `${gbp(accountTotal)} is ${quartile(v)} for people aged ${ageBand} with a private pension in payment (P25 ${gbp(v.p25)}, median ${gbp(v.p50)}, P75 ${gbp(v.p75)}, ${ons.period}). ` +
+                  `Includes defined benefit pensions valued as capital, so the bar is higher than a pure pot comparison.` });
+    }
+
+    flagsEl.innerHTML = flags.map(f => `
+        <div class="review-flag ${f.level}">
+            <span class="review-flag-title">${f.title}</span>
+            <span class="review-flag-text">${f.text}</span>
+        </div>`).join('');
+
+    srcEl.textContent = `FCA: ${fca.name}, ${fca.period}, published ${fca.published}. Counts are plans, not people; one person can hold several. ` +
+        `ONS: ${ons.name}, ${ons.period}, published ${ons.published}. ${ons.measure}`;
 }
 
 // Create world map for geographic distribution
@@ -2281,7 +2424,7 @@ document.getElementById('fileUpload').addEventListener('change', (e) => {
 // Event handlers
 document.addEventListener('DOMContentLoaded', async () => {
     // Load static holdings classification and benchmark data, then API keys
-    await Promise.all([loadHoldingsMap(), loadBenchmarks(), loadCPI()]);
+    await Promise.all([loadHoldingsMap(), loadBenchmarks(), loadCPI(), loadPeerBenchmarks()]);
     await loadAPIKeys();
 
     document.getElementById('benchmarkSelect').addEventListener('change', () => {
@@ -2300,6 +2443,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         const saved = localStorage.getItem(WITHDRAWAL_STORAGE_KEY);
         if (saved) document.getElementById('ddAnnualWithdrawal').value = saved;
     } catch (e) { /* storage unavailable; input starts empty */ }
+    try {
+        const savedAge = localStorage.getItem(AGE_BAND_STORAGE_KEY);
+        if (savedAge) document.getElementById('ddAgeBand').value = savedAge;
+    } catch (e) { /* ignore */ }
+    document.getElementById('ddAgeBand').addEventListener('change', () => {
+        try { localStorage.setItem(AGE_BAND_STORAGE_KEY, document.getElementById('ddAgeBand').value); } catch (e) { /* ignore */ }
+        if (portfolioData.length > 0) createDrawdownReview();
+    });
     ['ddAnnualWithdrawal', 'ddRateCeiling', 'ddRunwayFloor'].forEach(id => {
         document.getElementById(id).addEventListener('input', () => {
             if (id === 'ddAnnualWithdrawal') {
