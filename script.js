@@ -1598,12 +1598,15 @@ function createPortfolioReview() {
     const usWeight = port.regions['US'] || 0;
     if (totalCash !== null) {
         const cashPct = accountTotal ? totalCash / accountTotal * 100 : 0;
-        const excess = totalCash - accountTotal * rules.cashTarget / 100;
+        const ddr = readDrawdownRules();
+        const reserve = ddr.withdrawal !== null ? ddr.withdrawal / 12 * ddr.runwayFloor : accountTotal * rules.cashTarget / 100;
+        const basis = ddr.withdrawal !== null ? `${ddr.runwayFloor}-month withdrawal reserve ${gbp(reserve)}` : `${pct(rules.cashTarget)} cash target ${gbp(reserve)}`;
+        const excess = totalCash - reserve;
         flags.push({
-            level: cashPct > rules.cashTarget ? 'warn' : 'ok',
+            level: excess > 0 ? 'warn' : excess < 0 ? 'warn' : 'ok',
             title: 'Cash',
-            text: `${gbp(totalCash)} cash, ${pct(cashPct)} of the account. Target ${pct(rules.cashTarget)}. ` +
-                  (excess > 0 ? `${gbp(excess)} above target and uninvested.` : 'Within target.')
+            text: `${gbp(totalCash)} cash, ${pct(cashPct)} of the account. Basis: ${basis}. ` +
+                  (excess > 0 ? `${gbp(excess)} above the reserve and uninvested.` : excess < 0 ? `${gbp(-excess)} below the reserve.` : 'At the reserve.')
         });
     } else {
         flags.push({ level: 'info', title: 'Cash', text: 'No "Total cash" line found in this file.' });
@@ -1689,36 +1692,192 @@ function createPortfolioReview() {
         betsEl.innerHTML = '<p class="section-note">Benchmark data unavailable.</p>';
     }
 
-    // ---- Rebalance suggestions from the rules ----
-    const actions = [];
-    over.forEach(h => {
-        const target = invested * rules.maxPosition / 100;
-        actions.push({ kind: 'Trim', name: h.name, amount: h.value - target,
-            why: `${pct(h.weight)} exceeds the ${pct(rules.maxPosition)} single-position cap. In a SIPP there is no capital gains tax on the sale.` });
-    });
-    small.forEach(h => {
-        const target = invested * rules.minPosition / 100;
-        actions.push({ kind: 'Top up or exit', name: h.name, amount: target - h.value,
-            why: `${pct(h.weight)} is below the ${pct(rules.minPosition)} minimum. Top up to ${gbp(target)} if the thesis holds, otherwise release ${gbp(h.value)}.` });
-    });
+    // ---- Rebalance plan: reserve, trims, allocation, before/after ----
+    // Cash reserve comes from the drawdown runway when an annual withdrawal is
+    // entered (months of withdrawals held as cash); otherwise the cash target rule.
+    const dd = readDrawdownRules();
+    const plan = buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules, bench, withdrawal: dd.withdrawal, runwayFloor: dd.runwayFloor });
+
+    document.getElementById('reviewPlanNote').textContent = plan.reserveNote;
+
+    document.getElementById('reviewActionsTable').innerHTML = plan.actions.length ? `
+        <thead><tr><th>Action</th><th>Holding / sector</th><th class="num">Amount</th><th>Reason</th></tr></thead>
+        <tbody>${plan.actions.map(a => `<tr><td><span class="action-kind">${a.kind}</span></td><td>${a.name}</td><td class="num">${gbp(a.amount)}</td><td class="reason">${a.why}</td></tr>`).join('')}</tbody>`
+        : '<tbody><tr><td class="section-note">Portfolio is within all rules.</td></tr></tbody>';
+
+    const row = (label, before, after, ok) => `<tr><td>${label}</td><td class="num">${before}</td><td class="num">${after}</td><td><span class="dd-status ${ok === null ? '' : ok ? 'ok' : 'warn'}">${ok === null ? '—' : ok ? 'OK' : 'Check'}</span></td></tr>`;
+    const B = plan.before, A = plan.after;
+    document.getElementById('reviewPlanTable').innerHTML = `
+        <thead><tr><th>Measure</th><th class="num">Now</th><th class="num">After plan</th><th>Rule after</th></tr></thead>
+        <tbody>
+            ${row('Cash', `${gbp(B.cash)} (${pct(B.cashPct)})`, `${gbp(A.cash)} (${pct(A.cashPct)})`, A.cash >= plan.reserve - 1)}
+            ${row('Invested', gbp(B.invested), gbp(A.invested), null)}
+            ${row('Largest position', pct(B.largest), pct(A.largest), A.largest <= rules.maxPosition + 1e-9)}
+            ${row('Top 10 weight', pct(B.top10), pct(A.top10), null)}
+            ${row('Effective holdings (1/HHI)', B.effectiveN.toFixed(1), A.effectiveN.toFixed(1), null)}
+            ${row('Positions above cap', B.overCap, A.overCap, A.overCap === 0)}
+            ${bench ? row(`Sectors outside ±${rules.sectorBand} pts vs ${bench.name}`, B.sectorsOut, A.sectorsOut, A.sectorsOut === 0) : ''}
+            ${bench ? row('Largest sector gap (pts)', B.maxGap.toFixed(1), A.maxGap.toFixed(1), null) : ''}
+        </tbody>`;
+}
+
+// ---------------------------------------------------------------------------
+// Rebalance plan. Pure function of the snapshot and the rules.
+//   1. Reserve: cash to keep = runwayFloor months of withdrawals (if entered),
+//      else cashTarget % of the account. Deployable = cash - reserve.
+//   2. Trims: holdings above the max position are cut to the cap; proceeds join
+//      the deployable pool.
+//   3. Allocation: the pool is spread across sectors more than sectorBand points
+//      under the benchmark, in proportion to each gap and capped at the gap, so
+//      no sector overshoots the index. Each buy is also capped at the max
+//      position. Anything left stays as cash.
+//   4. Before/after: the same concentration and sector measures on the
+//      hypothetical portfolio if every action is taken.
+// Small positions are listed as decisions, not netted: exit or top-up is a
+// judgement the rules cannot make.
+// ---------------------------------------------------------------------------
+function concentrationStats(values, bench, band) {
+    const total = values.reduce((s, v) => s + v.value, 0);
+    const w = values.map(v => ({ ...v, weight: total ? v.value / total * 100 : 0 })).sort((a, b) => b.weight - a.weight);
+    const hhi = w.reduce((s, h) => s + Math.pow(h.weight / 100, 2), 0);
+    const sectors = {};
+    w.forEach(h => { sectors[h.sector] = (sectors[h.sector] || 0) + h.weight; });
+    let sectorsOut = 0, maxGap = 0;
     if (bench) {
-        Object.entries(bench.sectors).forEach(([name, b]) => {
-            const p = holdings.filter(h => h.sector === name).reduce((sum, h) => sum + h.weight, 0);
-            if (p - b < -rules.sectorBand) {
-                actions.push({ kind: 'Add exposure', name: name, amount: invested * (b - p) / 100,
-                    why: `Sector is ${(b - p).toFixed(1)} points under ${bench.name}. ${p === 0 ? 'Nothing held.' : ''} A sector ETF or one large-cap name closes it.` });
-            }
+        new Set([...Object.keys(bench.sectors), ...Object.keys(sectors)]).forEach(name => {
+            const gap = (sectors[name] || 0) - (bench.sectors[name] || 0);
+            if (Math.abs(gap) > band) sectorsOut++;
+            if (Math.abs(gap) > Math.abs(maxGap)) maxGap = gap;
         });
     }
-    if (totalCash !== null) {
-        const excess = totalCash - accountTotal * rules.cashTarget / 100;
-        if (excess > 0) actions.push({ kind: 'Deploy cash', name: 'Uninvested cash', amount: excess,
-            why: `Above the ${pct(rules.cashTarget)} cash target. Direct it at the underweights above rather than the existing overweights.` });
+    return { invested: total, largest: w[0]?.weight || 0, top10: w.slice(0, 10).reduce((s, h) => s + h.weight, 0),
+             effectiveN: hhi ? 1 / hhi : 0, sectors, sectorsOut, maxGap, weights: w };
+}
+
+function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules, bench, withdrawal, runwayFloor }) {
+    const gbp = n => '£' + Math.round(n).toLocaleString('en-GB');
+    const pct = n => n.toFixed(1) + '%';
+    const actions = [];
+    const cash = totalCash === null ? 0 : totalCash;
+
+    // 1. Reserve
+    let reserve, reserveNote;
+    if (withdrawal !== null) {
+        reserve = withdrawal / 12 * runwayFloor;
+        reserveNote = `Cash reserve ${gbp(reserve)} = ${runwayFloor} months of the ${gbp(withdrawal)} annual withdrawal (Drawdown Sustainability inputs). ` +
+                      `The cash target rule above is not used while a withdrawal is entered.`;
+    } else {
+        reserve = accountTotal * rules.cashTarget / 100;
+        reserveNote = `Cash reserve ${gbp(reserve)} = ${pct(rules.cashTarget)} of the account (cash target rule). ` +
+                      `Enter an annual withdrawal in Drawdown Sustainability to size the reserve from the cash runway instead.`;
     }
-    document.getElementById('reviewActionsTable').innerHTML = actions.length ? `
-        <thead><tr><th>Action</th><th>Holding / sector</th><th class="num">Amount</th><th>Reason</th></tr></thead>
-        <tbody>${actions.map(a => `<tr><td><span class="action-kind">${a.kind}</span></td><td>${a.name}</td><td class="num">${gbp(a.amount)}</td><td class="reason">${a.why}</td></tr>`).join('')}</tbody>`
-        : '<tbody><tr><td class="section-note">Portfolio is within all rules.</td></tr></tbody>';
+    if (totalCash === null) reserveNote += ' No "Total cash" line in this file; cash treated as £0.';
+
+    // Working copy of the portfolio
+    const work = holdings.map(h => ({ name: h.name, sector: h.sector, value: h.value }));
+    let pool = Math.max(0, cash - reserve);
+    const shortfall = Math.max(0, reserve - cash);
+
+    // 2. Trims
+    const capValue = invested * rules.maxPosition / 100;
+    work.forEach(h => {
+        if (h.value > capValue) {
+            const amount = h.value - capValue;
+            actions.push({ kind: 'Trim', name: h.name, amount,
+                why: `${pct(h.value / invested * 100)} exceeds the ${pct(rules.maxPosition)} single-position cap. Proceeds join the cash to deploy. No capital gains tax in a SIPP.` });
+            h.value = capValue; pool += amount;
+        }
+    });
+
+    // Reserve shortfall: cash below the reserve must come from the pool first
+    let poolAfterReserve = pool;
+    if (shortfall > 0) {
+        const cover = Math.min(pool, shortfall);
+        if (cover > 0) actions.push({ kind: 'Hold as cash', name: 'Reserve top-up', amount: cover,
+            why: `Cash ${gbp(cash)} is ${gbp(shortfall)} below the ${gbp(reserve)} reserve. Trim proceeds are kept as cash before anything is bought.` });
+        poolAfterReserve = pool - cover;
+        if (shortfall - cover > 0) actions.push({ kind: 'Raise cash', name: 'Sell to reach reserve', amount: shortfall - cover,
+            why: `Still ${gbp(shortfall - cover)} short of the reserve after trims. Sell from holdings below cost that are also under the minimum position, or from the largest positions.` });
+    }
+
+    // 3. Allocation across sector underweights. Fill order within a sector: existing
+    // holdings by headroom under the cap, then new positions sized at the cap.
+    // Position caps are tested against the invested total as it grows, so no
+    // holding ends above maxPosition after the plan.
+    let unallocated = poolAfterReserve;
+    if (bench && poolAfterReserve > 0) {
+        const cap = rules.maxPosition / 100;
+        const investedNow = () => work.reduce((s, h) => s + h.value, 0);
+        // Max amount that can be added to a holding of value v so that (v + x) <= cap * (inv + x)
+        const headroom = v => Math.max(0, (cap * investedNow() - v) / (1 - cap));
+        const investedTarget = investedNow() + poolAfterReserve;
+        const bySector = {};
+        work.forEach(h => { bySector[h.sector] = (bySector[h.sector] || 0) + h.value; });
+        const gaps = Object.entries(bench.sectors).map(([name, b]) => {
+            const cur = bySector[name] || 0;
+            const curPts = cur / investedTarget * 100;
+            return { name, b, curPts, need: Math.max(0, investedTarget * b / 100 - cur) };
+        }).filter(g => g.b - g.curPts > rules.sectorBand && g.need > 0);
+        const totalNeed = gaps.reduce((s, g) => s + g.need, 0);
+        if (totalNeed > 0) {
+            const scale = Math.min(1, poolAfterReserve / totalNeed);
+            gaps.sort((a, b) => b.need - a.need).forEach(g => {
+                let remaining = g.need * scale;
+                const gapPts = (g.b - g.curPts).toFixed(1);
+                // Top-up candidates: existing holdings at or above the minimum position,
+                // largest first. Sub-minimum holdings are a Decide row, not an automatic buy.
+                const minValue = investedTarget * rules.minPosition / 100;
+                const existing = work.filter(h => h.sector === g.name && !h.name.startsWith('New: ') && h.value >= minValue)
+                    .sort((a, b) => b.value - a.value);
+                for (const h of existing) {
+                    if (remaining < 1) break;
+                    const amount = Math.min(remaining, headroom(h.value));
+                    if (amount < 1) continue;
+                    actions.push({ kind: 'Buy', name: `${g.name} → ${h.name}`, amount,
+                        why: `Sector ${gapPts} pts under ${bench.name}. Top up existing holdings largest first; stops at the ${pct(rules.maxPosition)} position cap. Holdings under the minimum are left to the Decide row.` });
+                    h.value += amount; remaining -= amount; unallocated -= amount;
+                }
+                let n = 1;
+                while (remaining >= minValue) {   // a new position below the minimum is not opened; remainder stays as cash
+                    const amount = Math.min(remaining, headroom(0));
+                    if (amount < minValue) break;
+                    const label = `New: ${g.name}${n > 1 ? ' #' + n : ''}`;
+                    actions.push({ kind: 'Buy', name: `${g.name} → new position${n > 1 ? ' #' + n : ''}`, amount,
+                        why: existing.length
+                            ? `Sector still ${gapPts} pts under ${bench.name} after topping up existing holdings to the cap. A sector ETF or one large-cap name, sized at or below the ${pct(rules.maxPosition)} cap.`
+                            : `Sector ${gapPts} pts under ${bench.name}, nothing held. A sector ETF or one large-cap name, sized at or below the ${pct(rules.maxPosition)} cap.` });
+                    work.push({ name: label, sector: g.name, value: amount });
+                    remaining -= amount; unallocated -= amount; n++;
+                }
+            });
+        }
+    }
+    if (unallocated > 1) actions.push({ kind: 'Keep as cash', name: 'Unallocated', amount: unallocated,
+        why: bench ? `Left after closing every sector gap more than ${rules.sectorBand} pts under the index. Above the reserve; deploy at your discretion or raise the reserve.`
+                   : 'Benchmark data unavailable, so no sector allocation was made.' });
+
+    // Small positions: one summary row. Exit or top-up is a judgement the rules cannot make.
+    const small = holdings.filter(h => h.weight < rules.minPosition);
+    if (small.length) {
+        const topUp = small.reduce((s, h) => s + (invested * rules.minPosition / 100 - h.value), 0);
+        const release = small.reduce((s, h) => s + h.value, 0);
+        actions.push({ kind: 'Decide', name: `${small.length} holdings under ${pct(rules.minPosition)}`, amount: topUp,
+            why: `Top up all to the minimum for ${gbp(topUp)}, or exit all and release ${gbp(release)}. Per-holding figures in the Small positions table. Not included in the after-plan figures.` });
+    }
+
+    // 4. Before / after
+    const beforeStats = concentrationStats(holdings.map(h => ({ name: h.name, sector: h.sector, value: h.value })), bench, rules.sectorBand);
+    const afterStats = concentrationStats(work, bench, rules.sectorBand);
+    const cashAfterClean = Math.min(cash, reserve) + (pool - poolAfterReserve) + Math.max(0, unallocated);
+    const accountAfter = afterStats.invested + cashAfterClean;
+    const overCap = stats => stats.weights.filter(h => h.weight > rules.maxPosition + 1e-9).length;
+    return {
+        reserve, reserveNote, actions,
+        before: { cash, cashPct: accountTotal ? cash / accountTotal * 100 : 0, invested: beforeStats.invested, largest: beforeStats.largest, top10: beforeStats.top10,
+                  effectiveN: beforeStats.effectiveN, overCap: overCap(beforeStats), sectorsOut: beforeStats.sectorsOut, maxGap: beforeStats.maxGap },
+        after:  { cash: cashAfterClean, cashPct: accountAfter ? cashAfterClean / accountAfter * 100 : 0, invested: afterStats.invested, largest: afterStats.largest, top10: afterStats.top10,
+                  effectiveN: afterStats.effectiveN, overCap: overCap(afterStats), sectorsOut: afterStats.sectorsOut, maxGap: afterStats.maxGap }
+    };
 }
 
 // ---------------------------------------------------------------------------
