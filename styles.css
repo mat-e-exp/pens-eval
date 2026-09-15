@@ -1584,7 +1584,7 @@ details.holdings-section[open] .summary-hint {
 .stat-sub { display: block; color: #888; font-size: 0.75em; margin-top: 4px; }
 
 /* ---- Level 1: summary strip ---- */
-.header-meta { color: #888; font-size: 0.85em; margin: -20px 0 22px; }
+.header-meta { color: #888; font-size: 0.85em; margin: 0 0 22px; }
 .header-meta span { color: #c8c8c8; }
 .summary-strip {
     display: grid;
@@ -1592,7 +1592,7 @@ details.holdings-section[open] .summary-hint {
     gap: 14px;
     text-align: left;
 }
-.tile {
+.sum-tile {
     background: linear-gradient(135deg, #1a1a1a 0%, #252525 100%);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 16px;
@@ -1606,10 +1606,10 @@ details.holdings-section[open] .summary-hint {
     text-align: left;
     transition: transform 0.2s ease, border-color 0.2s ease;
 }
-.tile:hover { transform: translateY(-3px); border-color: rgba(168, 237, 234, 0.35); }
-.tile-label { font-size: 0.72em; color: #b8b8b8; text-transform: uppercase; letter-spacing: 1px; }
-.tile-value { font-size: 1.35em; font-weight: 700; color: #f0f0f0; }
-.tile-sub { font-size: 0.8em; color: #999; min-height: 1.2em; }
+.sum-tile:hover { transform: translateY(-3px); border-color: rgba(168, 237, 234, 0.35); }
+.st-label { font-size: 0.72em; color: #b8b8b8; text-transform: uppercase; letter-spacing: 1px; }
+.st-value { font-size: 1.35em; font-weight: 700; color: #f0f0f0; }
+.st-sub { font-size: 0.8em; color: #999; min-height: 1.2em; }
 .pill {
     align-self: flex-start;
     margin-top: 4px;

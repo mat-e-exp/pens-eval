@@ -1816,7 +1816,7 @@ function initSections() {
         });
     });
     document.querySelectorAll('details.sub').forEach(d => d.addEventListener('toggle', () => { if (d.open) refreshVisuals(); }));
-    document.querySelectorAll('.tile[data-target]').forEach(btn => {
+    document.querySelectorAll('.sum-tile[data-target]').forEach(btn => {
         btn.addEventListener('click', () => {
             const target = document.getElementById(btn.dataset.target);
             if (!target) return;
