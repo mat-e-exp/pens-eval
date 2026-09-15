@@ -72,6 +72,10 @@ let cpiError = null;
 // data and ONS Wealth and Assets Survey, transcribed from the published files.
 let peers = null;
 
+// Numbers the summary strip and section summary lines are drawn from.
+// Each renderer stashes its results here; renderSummaryStrip() reads them.
+const summaryState = { drawdown: null, review: null, bench: null, peers: null, plan: null };
+
 async function loadPeerBenchmarks() {
     try {
         const response = await fetch('data/peer-benchmarks.json?t=' + Date.now());
@@ -175,7 +179,7 @@ function updateEnvironmentDisplay(environment) {
     const envDisplay = document.getElementById('currentEnvironment');
     if (!envDisplay) {
         // Create environment display if it doesn't exist
-        const headerEl = document.querySelector('.header-stats');
+        const headerEl = document.querySelector('.summary-strip');
         if (headerEl) {
             const envEl = document.createElement('div');
             envEl.id = 'currentEnvironment';
@@ -1504,6 +1508,7 @@ function createBenchmarkComparison() {
     const share = activeShare(port, bench);
     const top10Tickers = new Set(bstats.top10List.map(h => h.ticker));
     const overlap = port.weights.filter(h => h.ticker && top10Tickers.has(h.ticker)).reduce((sum, h) => sum + h.weight, 0);
+    summaryState.bench = { name: bench.name, asOf: bench.as_of, activeShare: share, overlap };
     const tiles = [
         ['Holdings', fmtN(port.count), fmtN(bench.constituents)],
         ['Largest position', fmtPct(port.largest), fmtPct(bstats.largest)],
@@ -1596,21 +1601,6 @@ function createPortfolioReview() {
     // ---- Flags ----
     const flags = [];
     const usWeight = port.regions['US'] || 0;
-    if (totalCash !== null) {
-        const cashPct = accountTotal ? totalCash / accountTotal * 100 : 0;
-        const ddr = readDrawdownRules();
-        const reserve = ddr.withdrawal !== null ? ddr.withdrawal / 12 * ddr.runwayFloor : accountTotal * rules.cashTarget / 100;
-        const basis = ddr.withdrawal !== null ? `${ddr.runwayFloor}-month withdrawal reserve ${gbp(reserve)}` : `${pct(rules.cashTarget)} cash target ${gbp(reserve)}`;
-        const excess = totalCash - reserve;
-        flags.push({
-            level: excess > 0 ? 'warn' : excess < 0 ? 'warn' : 'ok',
-            title: 'Cash',
-            text: `${gbp(totalCash)} cash, ${pct(cashPct)} of the account. Basis: ${basis}. ` +
-                  (excess > 0 ? `${gbp(excess)} above the reserve and uninvested.` : excess < 0 ? `${gbp(-excess)} below the reserve.` : 'At the reserve.')
-        });
-    } else {
-        flags.push({ level: 'info', title: 'Cash', text: 'No "Total cash" line found in this file.' });
-    }
     flags.push({
         level: usWeight > 75 ? 'warn' : 'ok',
         title: 'Currency',
@@ -1719,6 +1709,123 @@ function createPortfolioReview() {
             ${bench ? row(`Sectors outside ±${rules.sectorBand} pts vs ${bench.name}`, B.sectorsOut, A.sectorsOut, A.sectorsOut === 0) : ''}
             ${bench ? row('Largest sector gap (pts)', B.maxGap.toFixed(1), A.maxGap.toFixed(1), null) : ''}
         </tbody>`;
+
+    summaryState.review = { largest: port.largest, effectiveN: port.effectiveN, count: port.count, overCap: over.length,
+                            small: small.length, sectorsOut: B.sectorsOut, band: rules.sectorBand, benchName: bench ? bench.name : null, usWeight };
+    summaryState.plan = { actions: plan.actions, reserve: plan.reserve, after: plan.after, before: plan.before };
+    renderSummaryStrip();
+}
+
+// ---------------------------------------------------------------------------
+// Summary strip (level 1) and section summary lines (level 2). Reads
+// summaryState only; every number here is owned by one renderer above.
+// ---------------------------------------------------------------------------
+function renderSummaryStrip() {
+    const gbp = n => '£' + Math.round(n).toLocaleString('en-GB');
+    const gbpK = n => n >= 1e6 ? '£' + (n / 1e6).toFixed(2) + 'm' : '£' + Math.round(n / 1000).toLocaleString('en-GB') + 'k';
+    const pct = n => n.toFixed(1) + '%';
+    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    const pill = (id, level, text) => { const el = document.getElementById(id); if (!el) return; el.className = 'pill' + (level ? ' ' + level : ''); el.textContent = text || ''; };
+    const D = summaryState.drawdown, R = summaryState.review, B = summaryState.bench, P = summaryState.peers, L = summaryState.plan;
+
+    // Account: cash vs reserve
+    if (D && L) {
+        if (D.cash === null) pill('tileAccountPill', 'info', 'no cash line');
+        else {
+            const diff = D.cash - L.reserve;
+            pill('tileAccountPill', Math.abs(diff) < 1 ? 'ok' : 'warn', diff > 0 ? `${gbpK(diff)} above reserve` : diff < 0 ? `${gbpK(-diff)} below reserve` : 'at reserve');
+        }
+    }
+
+    // Drawdown
+    if (D) {
+        if (D.W === null) { set('tileDrawdownValue', '—'); set('tileDrawdownSub', 'enter annual withdrawal'); pill('tileDrawdownPill', 'info', 'input needed'); }
+        else {
+            set('tileDrawdownValue', pct(D.rate) + ' a year');
+            set('tileDrawdownSub', D.months === null ? `${gbp(D.W)} withdrawal` : `${D.months.toFixed(0)} months cash runway`);
+            const bad = D.overCeiling || D.short;
+            pill('tileDrawdownPill', bad ? 'warn' : 'ok', D.overCeiling && D.short ? 'rate and runway' : D.overCeiling ? `rate above ${pct(D.ceiling)}` : D.short ? `runway under ${D.floor}m` : 'within rules');
+        }
+        set('sumDrawdown', D.W === null ? 'Enter your annual withdrawal to measure rate, runway and the inflation hurdle.'
+            : `${pct(D.rate)} withdrawal rate` + (D.months !== null ? `, ${D.months.toFixed(0)} months of cash` : '') + (D.cpiRate !== null ? `, CPI ${pct(D.cpiRate)}` : '') + '.');
+    }
+
+    // Concentration
+    if (R) {
+        set('tileConcValue', `${pct(R.largest)} largest`);
+        set('tileConcSub', `${R.effectiveN.toFixed(0)} effective of ${R.count} holdings`);
+        pill('tileConcPill', R.overCap ? 'warn' : 'ok', R.overCap ? `${R.overCap} above cap` : 'none above cap');
+        set('sumReview', `${R.overCap} above the position cap, ${R.small} under the minimum, ${pct(R.usWeight)} USD exposure.`);
+    }
+
+    // Vs index
+    if (R && B) {
+        set('tileIndexValue', `${R.sectorsOut} sector${R.sectorsOut === 1 ? '' : 's'} out`);
+        set('tileIndexSub', B.activeShare === null ? `vs ${B.name}` : `active share ${pct(B.activeShare)} vs ${B.name}`);
+        pill('tileIndexPill', R.sectorsOut ? 'warn' : 'ok', R.sectorsOut ? `beyond ±${R.band} pts` : `within ±${R.band} pts`);
+        set('sumBenchmark', `${B.name} (${B.asOf}): ${R.sectorsOut} sectors outside ±${R.band} pts, ${pct(B.overlap)} of the portfolio in the index top 10.`);
+    }
+
+    // Peers
+    if (P) {
+        set('tilePeerValue', P.potLabel + ' pot');
+        set('tilePeerSub', `larger than ${pct(P.below)} of pots entering drawdown${P.ageBand ? ', age ' + P.fcaAge : ''}`);
+        if (P.rate) pill('tilePeerPill', P.rate.below > 50 ? 'warn' : 'ok', `${pct(P.rate.below)} draw less than you`);
+        else pill('tilePeerPill', 'info', P.ageBand ? 'enter withdrawal' : 'select age band');
+    } else if (summaryState.drawdown) {
+        set('tilePeerValue', '—'); set('tilePeerSub', 'peer data unavailable'); pill('tilePeerPill', '', '');
+    }
+
+    // Plan
+    if (L) {
+        const buys = L.actions.filter(a => a.kind === 'Buy'), trims = L.actions.filter(a => a.kind === 'Trim');
+        const deploy = buys.reduce((s, a) => s + a.amount, 0);
+        const raise = L.actions.filter(a => a.kind === 'Raise cash').reduce((s, a) => s + a.amount, 0);
+        const firm = L.actions.filter(a => a.kind !== 'Decide' && a.kind !== 'Keep as cash').length;
+        set('tilePlanValue', firm ? `${firm} action${firm === 1 ? '' : 's'}` : 'no action');
+        set('tilePlanSub', raise > 0 ? `raise ${gbpK(raise)} for the reserve` : deploy > 0 ? `deploy ${gbpK(deploy)} into ${buys.length} buys` : 'within all rules');
+        pill('tilePlanPill', firm ? 'info' : 'ok', firm ? `${trims.length} trims, ${buys.length} buys` : 'nothing to do');
+        set('sumPlan', firm
+            ? `${trims.length} trim${trims.length === 1 ? '' : 's'}, ${buys.length} buy${buys.length === 1 ? '' : 's'} totalling ${gbp(deploy)}; cash after ${gbp(L.after.cash)} against a ${gbp(L.reserve)} reserve.`
+            : 'Portfolio is within all rules. Nothing to do.');
+    }
+
+    // Composition and holdings
+    if (portfolioData.length) {
+        const port = portfolioComposition();
+        const sectors = Object.keys(port.sectors).length;
+        const top = Object.entries(port.sectors).sort((a, b) => b[1] - a[1])[0];
+        set('sumComposition', `${port.count} holdings across ${sectors} sectors; largest sector ${top[0]} ${pct(top[1])}; US ${pct(port.regions['US'] || 0)}.`);
+        set('sumHoldings', `${port.count} holdings, ${gbp(port.total)} invested.`);
+    }
+}
+
+// Section behaviour: remembered open state, tile-to-section jumps, and
+// chart/map resize when a hidden container becomes visible.
+const OPEN_STATE_PREFIX = 'pensEval.open.';
+function initSections() {
+    const refreshVisuals = () => setTimeout(() => {
+        if (window.map && window.map.invalidateSize) window.map.invalidateSize();
+        Object.values(charts).forEach(c => { if (c && c.resize) c.resize(); });
+    }, 60);
+    document.querySelectorAll('details.section').forEach(d => {
+        try { if (localStorage.getItem(OPEN_STATE_PREFIX + d.id) === '1') d.open = true; } catch (e) { /* ignore */ }
+        d.addEventListener('toggle', () => {
+            try { localStorage.setItem(OPEN_STATE_PREFIX + d.id, d.open ? '1' : '0'); } catch (e) { /* ignore */ }
+            if (d.open) refreshVisuals();
+        });
+    });
+    document.querySelectorAll('details.sub').forEach(d => d.addEventListener('toggle', () => { if (d.open) refreshVisuals(); }));
+    document.querySelectorAll('.tile[data-target]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = document.getElementById(btn.dataset.target);
+            if (!target) return;
+            target.open = true;
+            const sub = btn.dataset.sub ? document.getElementById(btn.dataset.sub) : null;
+            if (sub) sub.open = true;
+            (sub || target).scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -1919,6 +2026,9 @@ function createDrawdownReview() {
     const flags = [];
     const rows = [];   // { measure, value, rule, status: 'ok'|'warn'|'info', note }
     const W = rules.withdrawal;
+    const dd = { W, accountTotal, cash: totalCash, rate: null, overCeiling: null, months: null, short: null,
+                 ceiling: rules.rateCeiling, floor: rules.runwayFloor, cpiRate: cpi ? cpi.rate : null };
+    summaryState.drawdown = dd;
 
     if (W === null) {
         flags.push({ level: 'info', title: 'Withdrawal',
@@ -1927,6 +2037,7 @@ function createDrawdownReview() {
         // Withdrawal rate
         const rate = accountTotal ? W / accountTotal * 100 : 0;
         const overCeiling = rate > rules.rateCeiling;
+        dd.rate = rate; dd.overCeiling = overCeiling;
         flags.push({ level: overCeiling ? 'warn' : 'ok', title: 'Withdrawal rate',
             text: `${gbp(W)} a year is ${pct(rate)} of the ${gbp(accountTotal)} account. Ceiling ${pct(rules.rateCeiling)}. ` +
                   (overCeiling ? `${gbp(W - accountTotal * rules.rateCeiling / 100)} a year above the ceiling.` : 'Within the ceiling.') });
@@ -1937,6 +2048,7 @@ function createDrawdownReview() {
         if (totalCash !== null) {
             const months = W > 0 ? totalCash / (W / 12) : Infinity;
             const short = months < rules.runwayFloor;
+            dd.months = months; dd.short = short;
             const shortfall12 = Math.max(0, W - totalCash);
             flags.push({ level: short ? 'warn' : 'ok', title: 'Cash runway',
                 text: `${gbp(totalCash)} cash covers ${months.toFixed(1)} months of withdrawals. Floor ${rules.runwayFloor} months. ` +
@@ -1995,6 +2107,7 @@ function createDrawdownReview() {
         (W !== null ? `Withdrawal: ${gbp(W)} a year, your input (stored in this browser only).` : '');
 
     createPeerComparison(accountTotal, W);
+    renderSummaryStrip();
 }
 
 // ---------------------------------------------------------------------------
@@ -2024,6 +2137,7 @@ function createPeerComparison(accountTotal, W) {
     const ageRateEl = document.getElementById('ddPeerAgeRateTable');
     const onsEl = document.getElementById('ddPeerOnsTable');
     const srcEl = document.getElementById('ddPeerSources');
+    summaryState.peers = null;
     if (!peers) {
         noteEl.textContent = 'Peer data unavailable (data/peer-benchmarks.json).';
         [flagsEl, potEl, rateEl, ageRateEl, onsEl].forEach(el => el.innerHTML = '');
@@ -2059,6 +2173,8 @@ function createPeerComparison(accountTotal, W) {
     const entering = fca.entering_drawdown.by_pot_band;
     const potDist = {}; potKeys.forEach(k => potDist[k] = entering[k][fcaAge]);
     const potPos = position(potDist, potKeys, potKey);
+    summaryState.peers = { potLabel, below: potPos.below, above: potPos.above, fcaAge, ageBand,
+                           rate: rateKey !== null ? position(fca.regular_withdrawal_rate_by_pot.by_pot_band[potKey], rateKeys, rateKey) : null };
     flags.push({ level: 'info', title: 'Pot size vs peers',
         text: `${gbp(accountTotal)} is in the ${potLabel} band. Of ${potPos.total.toLocaleString('en-GB')} pots entering drawdown in ${fca.period}${ageBand ? `, age ${fcaAge}` : ''}: ` +
               `${pct(potPos.below)} were smaller than this band, ${pct(potPos.inBand)} in it, ${pct(potPos.above)} larger.` });
@@ -2618,16 +2734,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (e) { /* ignore */ }
     document.getElementById('ddAgeBand').addEventListener('change', () => {
         try { localStorage.setItem(AGE_BAND_STORAGE_KEY, document.getElementById('ddAgeBand').value); } catch (e) { /* ignore */ }
-        if (portfolioData.length > 0) createDrawdownReview();
+        if (portfolioData.length > 0) { createDrawdownReview(); createPortfolioReview(); }
     });
     ['ddAnnualWithdrawal', 'ddRateCeiling', 'ddRunwayFloor'].forEach(id => {
         document.getElementById(id).addEventListener('input', () => {
             if (id === 'ddAnnualWithdrawal') {
                 try { localStorage.setItem(WITHDRAWAL_STORAGE_KEY, document.getElementById(id).value); } catch (e) { /* ignore */ }
             }
-            if (portfolioData.length > 0) createDrawdownReview();
+            if (portfolioData.length > 0) { createDrawdownReview(); createPortfolioReview(); }
         });
     });
+
+    initSections();
 
     // Initialize with file selection
     initializeFileSelection();

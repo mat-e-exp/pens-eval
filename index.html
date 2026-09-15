@@ -26,55 +26,175 @@
         <header class="header">
             <h1>Pension Portfolio Analysis</h1>
             <div class="current-file" id="currentFile"></div>
-            <div class="header-stats">
-                <div class="stat-card">
-                    <span class="stat-label">Account Value</span>
-                    <span class="stat-value" id="totalValue">£0</span>
-                    <span class="stat-sub" id="stockValue"></span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-label">Cash</span>
-                    <span class="stat-value" id="cashValue">£0</span>
-                    <span class="stat-sub" id="cashPct"></span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-label">Total Gain/Loss</span>
-                    <span class="stat-value" id="totalGainLoss">£0</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-label">Return %</span>
-                    <span class="stat-value" id="returnPercentage">0%</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-label">Day Change</span>
-                    <span class="stat-value" id="dayChange">£0</span>
-                </div>
+            <p class="header-meta">
+                Holdings <span id="stockValue"></span> ·
+                Gain/loss <span id="totalGainLoss">£0</span> (<span id="returnPercentage">0%</span> on cost) ·
+                Day <span id="dayChange">£0</span>
+            </p>
+
+            <!-- Level 1: summary strip. Each tile opens its section. -->
+            <div class="summary-strip" id="summaryStrip">
+                <button class="tile" data-target="secDrawdown">
+                    <span class="tile-label">Account</span>
+                    <span class="tile-value" id="totalValue">£0</span>
+                    <span class="tile-sub"><span id="cashValue">£0</span> cash, <span id="cashPct"></span></span>
+                    <span class="pill" id="tileAccountPill"></span>
+                </button>
+                <button class="tile" data-target="secDrawdown">
+                    <span class="tile-label">Drawdown</span>
+                    <span class="tile-value" id="tileDrawdownValue">—</span>
+                    <span class="tile-sub" id="tileDrawdownSub"></span>
+                    <span class="pill" id="tileDrawdownPill"></span>
+                </button>
+                <button class="tile" data-target="secReview">
+                    <span class="tile-label">Concentration</span>
+                    <span class="tile-value" id="tileConcValue">—</span>
+                    <span class="tile-sub" id="tileConcSub"></span>
+                    <span class="pill" id="tileConcPill"></span>
+                </button>
+                <button class="tile" data-target="secBenchmark">
+                    <span class="tile-label">Vs index</span>
+                    <span class="tile-value" id="tileIndexValue">—</span>
+                    <span class="tile-sub" id="tileIndexSub"></span>
+                    <span class="pill" id="tileIndexPill"></span>
+                </button>
+                <button class="tile" data-target="secDrawdown" data-sub="subPeers">
+                    <span class="tile-label">Peers</span>
+                    <span class="tile-value" id="tilePeerValue">—</span>
+                    <span class="tile-sub" id="tilePeerSub"></span>
+                    <span class="pill" id="tilePeerPill"></span>
+                </button>
+                <button class="tile" data-target="secPlan">
+                    <span class="tile-label">Plan</span>
+                    <span class="tile-value" id="tilePlanValue">—</span>
+                    <span class="tile-sub" id="tilePlanSub"></span>
+                    <span class="pill" id="tilePlanPill"></span>
+                </button>
             </div>
         </header>
 
-        <!-- Geographic Distribution Map - Full Width -->
-        <div class="map-section">
-            <div class="chart-container map-container">
-                <h2>Geographic Distribution</h2>
-                <div id="worldMap" style="height: 650px; border-radius: 10px;"></div>
-                <div class="legend" id="countryLegend"></div>
-            </div>
-        </div>
+        <!-- Level 2: sections. Closed by default; summary line reads as a report. -->
 
-        <!-- Sector Allocation - tile grid, one tile per sector -->
-        <div class="sector-section">
-            <div class="chart-container sector-container">
-                <h2>Sector Allocation</h2>
-                <p class="section-note">Tiles ordered by weight. Click a sector name to collapse or expand its holdings.</p>
-                <div class="sector-grid" id="sectorGrid"></div>
-                <div class="sector-data-sources" id="sectorDataSources"></div>
-            </div>
-        </div>
+        <details class="section" id="secDrawdown">
+            <summary>
+                <h2>Drawdown Sustainability</h2>
+                <span class="sum-line" id="sumDrawdown"></span>
+            </summary>
+            <div class="section-body">
+                <p class="section-note">Income drawdown checks from the account snapshot, your withdrawal figure and the latest ONS CPI print. Arithmetic only; no return forecasts.</p>
+                <div class="review-rules">
+                    <label>Annual withdrawal £ <input type="number" id="ddAnnualWithdrawal" step="500" min="0" placeholder="enter"></label>
+                    <label>Withdrawal rate ceiling <input type="number" id="ddRateCeiling" value="4" step="0.5" min="0"> % of account</label>
+                    <label>Cash runway floor <input type="number" id="ddRunwayFloor" value="24" step="6" min="0"> months</label>
+                </div>
+                <div class="review-flags" id="ddFlags"></div>
+                <details class="sub">
+                    <summary>Measures table and sources</summary>
+                    <div class="sector-table-wrapper"><table class="bench-table" id="ddTable"></table></div>
+                    <p class="section-note" id="ddSources"></p>
+                </details>
 
-        <!-- Benchmark Comparison -->
-        <div class="benchmark-section">
-            <div class="chart-container">
+                <details class="sub" id="subPeers">
+                    <summary>Peer comparison</summary>
+                    <p class="section-note" id="ddPeerNote"></p>
+                    <div class="review-rules">
+                        <label for="ddAgeBand">Your age band
+                            <select id="ddAgeBand" class="sort-select">
+                                <option value="">select</option>
+                                <option value="50-54">50–54</option>
+                                <option value="55-59">55–59</option>
+                                <option value="60-64">60–64</option>
+                                <option value="65-69">65–69</option>
+                                <option value="70-74">70–74</option>
+                                <option value="75+">75+</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="review-flags" id="ddPeerFlags"></div>
+                    <details class="sub">
+                        <summary>Distribution tables (FCA 2024/25, ONS 2020–22)</summary>
+                        <div class="bench-grid">
+                            <div class="bench-panel">
+                                <h3>Pots entering drawdown, by size</h3>
+                                <div class="sector-table-wrapper"><table class="bench-table" id="ddPeerPotTable"></table></div>
+                            </div>
+                            <div class="bench-panel">
+                                <h3>Withdrawal rate of pots your size</h3>
+                                <div class="sector-table-wrapper"><table class="bench-table" id="ddPeerRateTable"></table></div>
+                            </div>
+                        </div>
+                        <div class="bench-grid">
+                            <div class="bench-panel">
+                                <h3>Withdrawal rate of your age band</h3>
+                                <div class="sector-table-wrapper"><table class="bench-table" id="ddPeerAgeRateTable"></table></div>
+                            </div>
+                            <div class="bench-panel">
+                                <h3>Pension wealth in payment, by age</h3>
+                                <div class="sector-table-wrapper"><table class="bench-table" id="ddPeerOnsTable"></table></div>
+                            </div>
+                        </div>
+                        <p class="section-note" id="ddPeerSources"></p>
+                    </details>
+                </details>
+            </div>
+        </details>
+
+        <details class="section" id="secPlan">
+            <summary>
+                <h2>Rebalance Plan</h2>
+                <span class="sum-line" id="sumPlan"></span>
+            </summary>
+            <div class="section-body">
+                <p class="section-note" id="reviewPlanNote"></p>
+                <div class="sector-table-wrapper"><table class="bench-table" id="reviewActionsTable"></table></div>
+                <h3 class="review-h3">Before and after the plan</h3>
+                <p class="section-note">Cash, concentration and sector measures if every Trim, Buy and cash action above is taken. "Decide" rows are excluded. Rules are set in Portfolio Review.</p>
+                <div class="sector-table-wrapper"><table class="bench-table" id="reviewPlanTable"></table></div>
+            </div>
+        </details>
+
+        <details class="section" id="secReview">
+            <summary>
+                <h2>Portfolio Review</h2>
+                <span class="sum-line" id="sumReview"></span>
+            </summary>
+            <div class="section-body">
+                <p class="section-note">Decision checks from the holdings snapshot. Adjust the rules to your own policy; the plan and every table update.</p>
+                <div class="review-rules">
+                    <label>Max single position <input type="number" id="ruleMaxPosition" value="5" step="0.5" min="0"> %</label>
+                    <label>Min position <input type="number" id="ruleMinPosition" value="1.5" step="0.5" min="0"> %</label>
+                    <label>Sector band vs index ± <input type="number" id="ruleSectorBand" value="5" step="1" min="0"> pts</label>
+                    <label>Cash target <input type="number" id="ruleCashTarget" value="2" step="1" min="0"> % of account <span class="rule-hint">(used only when no withdrawal is entered)</span></label>
+                </div>
+                <div class="review-flags" id="reviewFlags"></div>
+
+                <details class="sub">
+                    <summary>Sector bets vs index</summary>
+                    <p class="section-note" id="reviewBetsNote"></p>
+                    <div class="review-bets" id="reviewBets"></div>
+                </details>
+                <details class="sub">
+                    <summary>Small positions and holdings below cost</summary>
+                    <div class="bench-grid">
+                        <div class="bench-panel">
+                            <h3>Small positions</h3>
+                            <div class="sector-table-wrapper"><table class="bench-table" id="reviewSmallTable"></table></div>
+                        </div>
+                        <div class="bench-panel">
+                            <h3>Holdings below cost</h3>
+                            <div class="sector-table-wrapper"><table class="bench-table" id="reviewLosersTable"></table></div>
+                        </div>
+                    </div>
+                </details>
+            </div>
+        </details>
+
+        <details class="section" id="secBenchmark">
+            <summary>
                 <h2>Benchmark Comparison</h2>
+                <span class="sum-line" id="sumBenchmark"></span>
+            </summary>
+            <div class="section-body">
                 <div class="benchmark-controls">
                     <label for="benchmarkSelect">Benchmark</label>
                     <select id="benchmarkSelect" class="sort-select">
@@ -84,156 +204,91 @@
                     <span class="section-note" id="benchmarkMeta"></span>
                 </div>
                 <div class="bench-stats" id="benchStats"></div>
-                <div class="bench-grid">
-                    <div class="bench-panel">
-                        <h3>Sector weights</h3>
-                        <div class="sector-table-wrapper"><table class="bench-table" id="benchSectorTable"></table></div>
+                <details class="sub">
+                    <summary>Sector, region and top-10 tables</summary>
+                    <div class="bench-grid">
+                        <div class="bench-panel">
+                            <h3>Sector weights</h3>
+                            <div class="sector-table-wrapper"><table class="bench-table" id="benchSectorTable"></table></div>
+                        </div>
+                        <div class="bench-panel">
+                            <h3>Region weights</h3>
+                            <div class="sector-table-wrapper"><table class="bench-table" id="benchRegionTable"></table></div>
+                            <h3>Index top 10: what the portfolio holds</h3>
+                            <div class="sector-table-wrapper"><table class="bench-table" id="benchTop10Table"></table></div>
+                        </div>
                     </div>
-                    <div class="bench-panel">
-                        <h3>Region weights</h3>
-                        <div class="sector-table-wrapper"><table class="bench-table" id="benchRegionTable"></table></div>
-                        <h3>Index top 10: what the portfolio holds</h3>
-                        <div class="sector-table-wrapper"><table class="bench-table" id="benchTop10Table"></table></div>
+                </details>
+            </div>
+        </details>
+
+        <details class="section" id="secComposition">
+            <summary>
+                <h2>Composition</h2>
+                <span class="sum-line" id="sumComposition"></span>
+            </summary>
+            <div class="section-body">
+                <h3 class="review-h3">Sector allocation</h3>
+                <p class="section-note">Tiles ordered by weight. Click a sector name to collapse or expand its holdings.</p>
+                <div class="sector-grid" id="sectorGrid"></div>
+                <div class="sector-data-sources" id="sectorDataSources"></div>
+
+                <details class="sub">
+                    <summary>Geographic distribution</summary>
+                    <div id="worldMap" style="height: 520px; border-radius: 10px;"></div>
+                    <div class="legend" id="countryLegend"></div>
+                </details>
+
+                <details class="sub">
+                    <summary>Market cap and performance bands</summary>
+                    <p class="section-note">Market cap band is a name-based guess in code, not sourced data.</p>
+                    <div class="main-grid">
+                        <div>
+                            <h3>Market Cap Distribution</h3>
+                            <canvas id="marketCapChart"></canvas>
+                            <div class="legend" id="marketCapLegend"></div>
+                        </div>
+                        <div>
+                            <h3>Performance Bands</h3>
+                            <canvas id="performanceChart"></canvas>
+                            <div class="legend" id="performanceLegend"></div>
+                        </div>
                     </div>
+                </details>
+
+                <details class="sub">
+                    <summary>Top and bottom performers</summary>
+                    <div class="performance-section">
+                        <div class="performers-card">
+                            <h3>Top Performers</h3>
+                            <div id="topPerformers" class="performers-list"></div>
+                        </div>
+                        <div class="performers-card">
+                            <h3>Bottom Performers</h3>
+                            <div id="bottomPerformers" class="performers-list"></div>
+                        </div>
+                    </div>
+                </details>
+            </div>
+        </details>
+
+        <details class="section holdings-section" id="holdingsSection">
+            <summary>
+                <h2>Portfolio Holdings</h2>
+                <span class="sum-line" id="sumHoldings"></span>
+            </summary>
+            <div class="section-body">
+                <div class="table-controls">
+                    <input type="text" id="searchInput" placeholder="Search holdings, sector or country..." class="search-input">
+                    <select id="sortSelect" class="sort-select">
+                        <option value="value">Sort by Value</option>
+                        <option value="gain">Sort by Gain %</option>
+                        <option value="name">Sort by Name</option>
+                        <option value="sector">Sort by Sector</option>
+                        <option value="country">Sort by Country</option>
+                    </select>
                 </div>
-            </div>
-        </div>
-
-        <!-- Portfolio Review -->
-        <div class="review-section">
-            <div class="chart-container">
-                <h2>Portfolio Review</h2>
-                <p class="section-note">Decision checks from the holdings snapshot only. Adjust the rules to your own policy; every table updates.</p>
-                <div class="review-rules">
-                    <label>Max single position <input type="number" id="ruleMaxPosition" value="5" step="0.5" min="0"> %</label>
-                    <label>Min position <input type="number" id="ruleMinPosition" value="1.5" step="0.5" min="0"> %</label>
-                    <label>Sector band vs index ± <input type="number" id="ruleSectorBand" value="5" step="1" min="0"> pts</label>
-                    <label>Cash target <input type="number" id="ruleCashTarget" value="2" step="1" min="0"> % of account</label>
-                </div>
-                <div class="review-flags" id="reviewFlags"></div>
-
-                <div class="bench-grid">
-                    <div class="bench-panel">
-                        <h3>Small positions</h3>
-                        <div class="sector-table-wrapper"><table class="bench-table" id="reviewSmallTable"></table></div>
-                    </div>
-                    <div class="bench-panel">
-                        <h3>Holdings below cost</h3>
-                        <div class="sector-table-wrapper"><table class="bench-table" id="reviewLosersTable"></table></div>
-                    </div>
-                </div>
-
-                <h3 class="review-h3">Sector bets</h3>
-                <p class="section-note" id="reviewBetsNote"></p>
-                <div class="review-bets" id="reviewBets"></div>
-
-                <h3 class="review-h3">Rebalance plan</h3>
-                <p class="section-note" id="reviewPlanNote"></p>
-                <div class="sector-table-wrapper"><table class="bench-table" id="reviewActionsTable"></table></div>
-
-                <h3 class="review-h3">Before and after the plan</h3>
-                <p class="section-note">Concentration and sector measures if every Trim, Buy and cash action above is taken. "Decide" rows are excluded.</p>
-                <div class="sector-table-wrapper"><table class="bench-table" id="reviewPlanTable"></table></div>
-            </div>
-        </div>
-
-        <!-- Drawdown Sustainability -->
-        <div class="review-section">
-            <div class="chart-container">
-                <h2>Drawdown Sustainability</h2>
-                <p class="section-note">Income drawdown checks from the account snapshot, your withdrawal figure and the latest ONS CPI print. Arithmetic only; no return forecasts.</p>
-                <div class="review-rules">
-                    <label>Annual withdrawal £ <input type="number" id="ddAnnualWithdrawal" step="500" min="0" placeholder="enter"></label>
-                    <label>Withdrawal rate ceiling <input type="number" id="ddRateCeiling" value="4" step="0.5" min="0"> % of account</label>
-                    <label>Cash runway floor <input type="number" id="ddRunwayFloor" value="24" step="6" min="0"> months</label>
-                </div>
-                <div class="review-flags" id="ddFlags"></div>
-                <div class="sector-table-wrapper"><table class="bench-table" id="ddTable"></table></div>
-                <p class="section-note" id="ddSources"></p>
-
-                <h3 class="review-h3">Peer comparison</h3>
-                <p class="section-note" id="ddPeerNote"></p>
-                <div class="review-rules">
-                    <label for="ddAgeBand">Your age band
-                        <select id="ddAgeBand" class="sort-select">
-                            <option value="">select</option>
-                            <option value="50-54">50–54</option>
-                            <option value="55-59">55–59</option>
-                            <option value="60-64">60–64</option>
-                            <option value="65-69">65–69</option>
-                            <option value="70-74">70–74</option>
-                            <option value="75+">75+</option>
-                        </select>
-                    </label>
-                </div>
-                <div class="review-flags" id="ddPeerFlags"></div>
-                <div class="bench-grid">
-                    <div class="bench-panel">
-                        <h3>Pots entering drawdown, by size</h3>
-                        <div class="sector-table-wrapper"><table class="bench-table" id="ddPeerPotTable"></table></div>
-                    </div>
-                    <div class="bench-panel">
-                        <h3>Withdrawal rate of pots your size</h3>
-                        <div class="sector-table-wrapper"><table class="bench-table" id="ddPeerRateTable"></table></div>
-                    </div>
-                </div>
-                <div class="bench-grid">
-                    <div class="bench-panel">
-                        <h3>Withdrawal rate of your age band</h3>
-                        <div class="sector-table-wrapper"><table class="bench-table" id="ddPeerAgeRateTable"></table></div>
-                    </div>
-                    <div class="bench-panel">
-                        <h3>Pension wealth in payment, by age</h3>
-                        <div class="sector-table-wrapper"><table class="bench-table" id="ddPeerOnsTable"></table></div>
-                    </div>
-                </div>
-                <p class="section-note" id="ddPeerSources"></p>
-            </div>
-        </div>
-
-        <div class="main-grid">
-            <!-- Market Cap Distribution -->
-            <div class="chart-container">
-                <h2>Market Cap Distribution</h2>
-                <canvas id="marketCapChart"></canvas>
-                <div class="legend" id="marketCapLegend"></div>
-            </div>
-
-            <!-- Performance Distribution -->
-            <div class="chart-container">
-                <h2>Performance Bands</h2>
-                <canvas id="performanceChart"></canvas>
-                <div class="legend" id="performanceLegend"></div>
-            </div>
-        </div>
-
-        <!-- Top Performers and Losers -->
-        <div class="performance-section">
-            <div class="performers-card">
-                <h3>Top Performers</h3>
-                <div id="topPerformers" class="performers-list"></div>
-            </div>
-            <div class="performers-card">
-                <h3>Bottom Performers</h3>
-                <div id="bottomPerformers" class="performers-list"></div>
-            </div>
-        </div>
-
-        <!-- Holdings Analysis (collapsed by default) -->
-        <details class="holdings-section" id="holdingsSection">
-            <summary><h2>Portfolio Holdings Analysis</h2><span class="summary-hint">click to expand</span></summary>
-            <div class="table-controls">
-                <input type="text" id="searchInput" placeholder="Search holdings, sector or country..." class="search-input">
-                <select id="sortSelect" class="sort-select">
-                    <option value="value">Sort by Value</option>
-                    <option value="gain">Sort by Gain %</option>
-                    <option value="name">Sort by Name</option>
-                    <option value="sector">Sort by Sector</option>
-                    <option value="country">Sort by Country</option>
-                </select>
-            </div>
-            <div class="holdings-grid" id="holdingsGrid">
-                <!-- Holdings cards will be generated here -->
+                <div class="holdings-grid" id="holdingsGrid"></div>
             </div>
         </details>
 
