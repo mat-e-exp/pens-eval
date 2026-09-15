@@ -64,7 +64,7 @@ Alpha Vantage calls run from the browser. Without a key the app uses the holding
 
 ## Not built
 
-Return vs benchmark (XIRR, TWR). Needs two or more dated HL exports plus a transaction-history export; see `CLAUDE.md` → Performance Measurement.
+Return vs benchmark (XIRR, TWR). Needs two or more dated HL exports plus a transaction-history export; see `CLAUDE.md` → Performance Measurement. Planned work and researched dead ends are in [ROADMAP.md](ROADMAP.md).
 
 ## Legacy files
 
