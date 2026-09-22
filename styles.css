@@ -78,7 +78,6 @@ body {
     width: 100%;
 }
 
-
 .stock-item {
     padding: 12px 15px;
     margin: 8px 0;
@@ -491,28 +490,10 @@ body {
     font-style: italic;
 }
 
-.sentiment-unavailable {
-    text-align: center;
-    padding: 15px;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 8px;
-    border: 1px dashed #555;
-}
-
-.sentiment-unavailable h4 {
-    margin-bottom: 8px;
-    color: #b8b8b8;
-}
-
 .error-message {
     color: #FFB3B3;
     font-size: 0.9em;
     margin: 5px 0;
-}
-
-.sentiment-unavailable small {
-    color: #888;
-    font-size: 0.75em;
 }
 
 /* Environment indicator styling */
@@ -591,71 +572,6 @@ body {
     color: #BAE1FF;
 }
 
-.sentiment-section {
-    flex: 0 0 280px;
-    display: flex;
-    gap: 20px;
-}
-
-.sentiment-item {
-    flex: 1;
-    text-align: center;
-}
-
-.sentiment-item h4 {
-    color: #c3f0ea;
-    font-size: 0.75em;
-    margin-bottom: 6px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.sentiment-score {
-    display: flex;
-    justify-content: center;
-    gap: 3px;
-    margin-bottom: 3px;
-}
-
-.sentiment-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.2);
-    transition: all 0.3s ease;
-}
-
-.sentiment-dot.active {
-    transform: scale(1.3);
-}
-
-.sentiment-dot.very-negative {
-    background: #ff4757;
-}
-
-.sentiment-dot.negative {
-    background: #ff6b7a;
-}
-
-.sentiment-dot.neutral {
-    background: #ffa502;
-}
-
-.sentiment-dot.positive {
-    background: #7bed9f;
-}
-
-.sentiment-dot.very-positive {
-    background: #2ed573;
-}
-
-.sentiment-label {
-    font-size: 0.7em;
-    color: #888;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
 @media (max-width: 1200px) {
     .holding-card {
         flex-direction: column;
@@ -672,11 +588,6 @@ body {
         flex: none;
         flex-direction: row;
         justify-content: space-between;
-    }
-
-    .sentiment-section {
-        flex: none;
-        justify-content: space-around;
     }
 }
 
@@ -925,79 +836,6 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(135deg, #fed6e3 0%, #a8edea 100%);
-}
-
-/* Sentiment Analysis Styles */
-.sentiment-item {
-    margin-bottom: 15px;
-}
-
-.sentiment-item h4 {
-    font-size: 0.9em;
-    color: #b8b8b8;
-    margin-bottom: 8px;
-}
-
-.sentiment-bar {
-    position: relative;
-    height: 25px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.sentiment-fill {
-    height: 100%;
-    border-radius: 12px;
-    transition: width 0.3s ease;
-    position: relative;
-}
-
-.sentiment-score-text {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 0.8em;
-    font-weight: bold;
-    color: #1a1a1a;
-    text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.3);
-    z-index: 2;
-}
-
-.sentiment-bar.very-positive .sentiment-fill {
-    background: linear-gradient(90deg, #4CAF50, #66BB6A);
-}
-
-.sentiment-bar.positive .sentiment-fill {
-    background: linear-gradient(90deg, #8BC34A, #9CCC65);
-}
-
-.sentiment-bar.neutral .sentiment-fill {
-    background: linear-gradient(90deg, #FFC107, #FFD54F);
-}
-
-.sentiment-bar.negative .sentiment-fill {
-    background: linear-gradient(90deg, #FF9800, #FFB74D);
-}
-
-.sentiment-bar.very-negative .sentiment-fill {
-    background: linear-gradient(90deg, #F44336, #EF5350);
-}
-
-.sentiment-label {
-    font-size: 0.8em;
-    color: #e0e0e0;
-    margin-top: 5px;
-    font-weight: 500;
-}
-
-.sentiment-source {
-    font-size: 0.7em;
-    color: #888;
-    margin-top: 3px;
-    font-style: italic;
 }
 /* Dark-theme the OpenStreetMap tiles (script.js createWorldMap) */
 #worldMap .leaflet-tile-pane {

@@ -1,37 +1,18 @@
-// GICS Sector Classification & Financial Calendar System
-//
-// To enable real GICS classification:
-// 1. Get a free API key from: https://www.alphavantage.co/support/#api-key
-// 2. Replace ALPHA_VANTAGE_API_KEY below with your actual key
-// 3. Set USE_GICS_API to true
-//
-// To enable real financial calendar data (earnings, dividends):
-// 1. Get a free Finnhub API key from: https://finnhub.io/register
-// 2. Get a free FMP API key from: https://site.financialmodelingprep.com/developer/docs
-// 3. Replace the API keys below with your actual keys
-// 4. Set USE_FINANCIAL_CALENDAR to true
-//
-// When disabled, the system uses fallback manual mappings and mock data
+// GICS sector classification. Alpha Vantage Company Overview is used when an
+// API key is present in data/{live,test}/api-keys.json (copy from
+// data/api-keys.example.json; free key: https://www.alphavantage.co/support/#api-key).
 
 // Cache for API responses to avoid repeated calls
 const gicsCache = new Map();
 
 // API Configuration - Keys are loaded from data/api-keys.json for security
 let ALPHA_VANTAGE_API_KEY = '';
-let FINNHUB_API_KEY = '';
-let FMP_API_KEY = '';
 
 // API Base URLs
 const ALPHA_VANTAGE_BASE_URL = 'https://www.alphavantage.co/query';
-const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
-const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
 
 // Feature flags - will be updated based on loaded API keys
 let USE_GICS_API = false;
-let USE_FINANCIAL_CALENDAR = false;
-
-// Track current environment
-let currentEnvironment = null;
 
 // Static holdings classification (data/holdings-map.json): authoritative GICS
 // sector + domicile per known holding. Name-pattern guessing is the fallback only.
@@ -153,7 +134,6 @@ async function loadAPIKeys(environment = null) {
             environment = 'live';
         }
 
-        currentEnvironment = environment;
         const apiKeyPath = `data/${environment}/api-keys.json`;
 
         console.log(`Loading API keys from ${environment} environment...`);
@@ -162,19 +142,13 @@ async function loadAPIKeys(environment = null) {
         if (response.ok) {
             const keys = await response.json();
             ALPHA_VANTAGE_API_KEY = keys.ALPHA_VANTAGE_API_KEY || '';
-            FINNHUB_API_KEY = keys.FINNHUB_API_KEY || '';
-            FMP_API_KEY = keys.FMP_API_KEY || '';
 
             // Enable features based on available API keys
             USE_GICS_API = ALPHA_VANTAGE_API_KEY && ALPHA_VANTAGE_API_KEY !== 'demo' && ALPHA_VANTAGE_API_KEY !== '';
-            USE_FINANCIAL_CALENDAR = (FINNHUB_API_KEY && FINNHUB_API_KEY !== 'demo') ||
-                                    (FMP_API_KEY && FMP_API_KEY !== 'demo');
 
             console.log(`API keys loaded from ${environment.toUpperCase()} environment:`, {
                 'Environment': environment.toUpperCase(),
-                'Alpha Vantage': USE_GICS_API ? 'Configured' : 'Not configured',
-                'Finnhub': FINNHUB_API_KEY && FINNHUB_API_KEY !== 'demo' ? 'Configured' : 'Not configured',
-                'FMP': FMP_API_KEY && FMP_API_KEY !== 'demo' ? 'Configured' : 'Not configured'
+                'Alpha Vantage': USE_GICS_API ? 'Configured' : 'Not configured'
             });
 
             // Update UI to show current environment
@@ -205,9 +179,6 @@ function updateEnvironmentDisplay(environment) {
         envDisplay.innerHTML = `<span class="env-label">Environment:</span> <span class="env-value ${environment}">${environment.toUpperCase()}</span>`;
     }
 }
-
-// Cache for financial calendar data
-const financialCalendarCache = new Map();
 
 // GICS Sector mapping (standard 11 sectors)
 const GICS_SECTORS = {
@@ -665,415 +636,6 @@ const getSectorSync = (stockName) => {
     return getSectorBestGuess(stockName);
 };
 
-// ============================================================================
-// FINANCIAL CALENDAR FUNCTIONS
-// ============================================================================
-
-// Get upcoming earnings for a stock from Finnhub
-const getUpcomingEarnings = async (symbol) => {
-    if (!symbol || !USE_FINANCIAL_CALENDAR) return null;
-
-    const cacheKey = `earnings_${symbol}`;
-    if (financialCalendarCache.has(cacheKey)) {
-        return financialCalendarCache.get(cacheKey);
-    }
-
-    try {
-        // Get earnings calendar for next 30 days
-        const today = new Date();
-        const nextMonth = new Date();
-        nextMonth.setMonth(nextMonth.getMonth() + 1);
-
-        const fromDate = today.toISOString().split('T')[0];
-        const toDate = nextMonth.toISOString().split('T')[0];
-
-        const url = `${FINNHUB_BASE_URL}/calendar/earnings?from=${fromDate}&to=${toDate}&symbol=${symbol}&token=${FINNHUB_API_KEY}`;
-        const response = await fetch(url);
-        const data = await response.json();
-
-        if (data.earningsCalendar && data.earningsCalendar.length > 0) {
-            const earnings = data.earningsCalendar[0]; // Get next earnings
-            const earningsData = {
-                date: earnings.date,
-                epsEstimate: earnings.epsEstimate,
-                epsActual: earnings.epsActual,
-                revenueEstimate: earnings.revenueEstimate,
-                revenueActual: earnings.revenueActual,
-                quarter: earnings.quarter,
-                year: earnings.year,
-                time: earnings.hour // 'bmo' = before market open, 'amc' = after market close
-            };
-
-            financialCalendarCache.set(cacheKey, earningsData);
-            return earningsData;
-        }
-    } catch (error) {
-        console.log(`Error fetching earnings for ${symbol}:`, error);
-    }
-
-    return null;
-};
-
-// Get dividend information from FMP
-const getDividendInfo = async (symbol) => {
-    if (!symbol || !USE_FINANCIAL_CALENDAR) return null;
-
-    const cacheKey = `dividend_${symbol}`;
-    if (financialCalendarCache.has(cacheKey)) {
-        return financialCalendarCache.get(cacheKey);
-    }
-
-    try {
-        // Get upcoming dividends for next 3 months
-        const today = new Date();
-        const threeMonths = new Date();
-        threeMonths.setMonth(threeMonths.getMonth() + 3);
-
-        const fromDate = today.toISOString().split('T')[0];
-        const toDate = threeMonths.toISOString().split('T')[0];
-
-        const url = `${FMP_BASE_URL}/stock_dividend_calendar?from=${fromDate}&to=${toDate}&apikey=${FMP_API_KEY}`;
-        const response = await fetch(url);
-        const data = await response.json();
-
-        if (data && Array.isArray(data)) {
-            // Find dividend for this symbol
-            const dividend = data.find(d => d.symbol === symbol);
-            if (dividend) {
-                const dividendData = {
-                    exDividendDate: dividend.date,
-                    dividendAmount: dividend.dividend,
-                    paymentDate: dividend.paymentDate,
-                    recordDate: dividend.recordDate,
-                    declarationDate: dividend.declarationDate
-                };
-
-                financialCalendarCache.set(cacheKey, dividendData);
-                return dividendData;
-            }
-        }
-    } catch (error) {
-        console.log(`Error fetching dividend info for ${symbol}:`, error);
-    }
-
-    return null;
-};
-
-// Intelligent financial calendar guessing based on company patterns and typical schedules
-// Get comprehensive financial calendar data for a stock with intelligent fallbacks
-const getFinancialCalendar = async (stockName) => {
-    const symbol = extractStockSymbol(stockName);
-
-    // Try API first if available
-    if (USE_FINANCIAL_CALENDAR && FINNHUB_API_KEY && FMP_API_KEY && symbol) {
-        try {
-            // Fetch both earnings and dividend data in parallel
-            const [earnings, dividend] = await Promise.all([
-                getUpcomingEarnings(symbol),
-                getDividendInfo(symbol)
-            ]);
-
-            if (earnings || dividend) {
-                console.log(`Financial calendar for ${stockName}: Real data from APIs`);
-                return {
-                    symbol: symbol,
-                    earnings: earnings,
-                    dividend: dividend,
-                    lastUpdated: new Date().toISOString(),
-                    source: 'Finnhub and FMP APIs'
-                };
-            }
-        } catch (error) {
-            console.log(`Error fetching financial calendar for ${stockName}:`, error);
-        }
-    }
-
-    // No fabricated fallback: without API data the calendar is simply unavailable
-    return null;
-};
-
-// Format financial calendar data for display
-const formatFinancialCalendar = (calendar) => {
-    if (!calendar) return 'No upcoming events';
-
-    const events = [];
-
-    if (calendar.earnings) {
-        const earningsDate = new Date(calendar.earnings.date);
-        const timeLabel = calendar.earnings.time === 'bmo' ? 'Before Market' : 'After Market';
-        events.push(`Earnings: ${earningsDate.toLocaleDateString()} (${timeLabel})`);
-
-        if (calendar.earnings.epsEstimate) {
-            events.push(`Est. EPS: $${calendar.earnings.epsEstimate}`);
-        }
-    }
-
-    if (calendar.dividend) {
-        const divDate = new Date(calendar.dividend.exDividendDate);
-        events.push(`Ex-Dividend: ${divDate.toLocaleDateString()}`);
-
-        if (calendar.dividend.dividendAmount) {
-            events.push(`Amount: $${calendar.dividend.dividendAmount}`);
-        }
-    }
-
-    return events.length > 0 ? events.join(' | ') : 'No upcoming events';
-};
-
-// Generate key dates from financial calendar data
-const generateKeyDatesFromCalendar = (calendar) => {
-    const keyDates = [];
-    const today = new Date();
-
-    // Check if calendar has error (API not available)
-    if (!calendar || calendar.error) {
-        return [{
-            label: 'Financial Calendar',
-            message: calendar?.message || 'API access required',
-            type: 'error',
-            isError: true
-        }];
-    }
-
-    if (calendar.earnings) {
-        const earningsDate = new Date(calendar.earnings.date);
-        keyDates.push({
-            label: 'Earnings',
-            date: earningsDate,
-            isUpcoming: earningsDate > today,
-            type: 'earnings'
-        });
-    }
-
-    if (calendar.dividend) {
-        if (calendar.dividend.exDividendDate) {
-            const exDivDate = new Date(calendar.dividend.exDividendDate);
-            keyDates.push({
-                label: 'Ex-Dividend',
-                date: exDivDate,
-                isUpcoming: exDivDate > today,
-                type: 'dividend'
-            });
-        }
-
-        if (calendar.dividend.paymentDate) {
-            const paymentDate = new Date(calendar.dividend.paymentDate);
-            keyDates.push({
-                label: 'Div Payment',
-                date: paymentDate,
-                isUpcoming: paymentDate > today,
-                type: 'dividend'
-            });
-        }
-    }
-
-    // Sort by date
-    keyDates.sort((a, b) => a.date - b.date);
-
-    // If no financial events found (but no error), show appropriate message
-    if (keyDates.length === 0) {
-        return [{
-            label: 'No Events',
-            message: 'No upcoming financial events found',
-            type: 'info',
-            isInfo: true
-        }];
-    }
-
-    return keyDates;
-};
-
-// Get the next upcoming financial event date for sorting
-const getNextEventDate = (calendar) => {
-    const today = new Date();
-    const events = [];
-
-    // If calendar has error or no data, return far future date (sorts to bottom)
-    if (!calendar || calendar.error) {
-        return new Date('2099-12-31');
-    }
-
-    if (calendar.earnings) {
-        const earningsDate = new Date(calendar.earnings.date);
-        if (earningsDate >= today) {
-            events.push(earningsDate);
-        }
-    }
-
-    if (calendar.dividend) {
-        if (calendar.dividend.exDividendDate) {
-            const exDivDate = new Date(calendar.dividend.exDividendDate);
-            if (exDivDate >= today) {
-                events.push(exDivDate);
-            }
-        }
-        if (calendar.dividend.paymentDate) {
-            const paymentDate = new Date(calendar.dividend.paymentDate);
-            if (paymentDate >= today) {
-                events.push(paymentDate);
-            }
-        }
-    }
-
-    if (events.length === 0) {
-        // If no upcoming events, return far future date so it sorts to the bottom
-        return new Date('2099-12-31');
-    }
-
-    // Return the earliest upcoming event
-    return new Date(Math.min(...events.map(date => date.getTime())));
-};
-
-// Intelligent best guess for sentiment analysis
-function getSentimentBestGuess(stock, sector) {
-    // Stock sentiment based on performance metrics
-    const stockSentiment = calculateStockSentiment(stock);
-
-    // Sector sentiment based on aggregated performance
-    const sectorSentiment = calculateSectorSentiment(sector, stock);
-
-    return {
-        stockSentiment: {
-            score: stockSentiment.score,
-            label: stockSentiment.label,
-            source: 'Performance-based analysis'
-        },
-        sectorSentiment: {
-            score: sectorSentiment.score,
-            label: sectorSentiment.label,
-            source: 'Sector trend analysis'
-        }
-    };
-}
-
-// Calculate stock sentiment based on performance metrics
-function calculateStockSentiment(stock) {
-    let score = 50; // Neutral baseline
-
-    // Weight based on gain/loss percentage
-    const gainPercent = stock.gainLossPercent;
-    if (gainPercent > 20) score += 30;
-    else if (gainPercent > 10) score += 20;
-    else if (gainPercent > 5) score += 10;
-    else if (gainPercent > 0) score += 5;
-    else if (gainPercent > -5) score -= 5;
-    else if (gainPercent > -10) score -= 10;
-    else if (gainPercent > -20) score -= 20;
-    else score -= 30;
-
-    // Weight based on day change
-    const dayChangePercent = (stock.dayGainLoss / stock.value) * 100;
-    if (dayChangePercent > 3) score += 15;
-    else if (dayChangePercent > 1) score += 10;
-    else if (dayChangePercent > 0) score += 5;
-    else if (dayChangePercent > -1) score -= 5;
-    else if (dayChangePercent > -3) score -= 10;
-    else score -= 15;
-
-    // Clamp to 0-100 range
-    score = Math.max(0, Math.min(100, score));
-
-    return {
-        score: Math.round(score),
-        label: getSentimentLabel(score)
-    };
-}
-
-// Calculate sector sentiment based on portfolio sector performance
-function calculateSectorSentiment(sectorName, currentStock) {
-    // Find all stocks in the same sector
-    const sectorStocks = portfolioData.filter(stock => {
-        const stockSector = stock.sector || getSectorBestGuess(stock.name).sector;
-        return stockSector === sectorName;
-    });
-
-    if (sectorStocks.length === 0) {
-        return { score: 50, label: 'Neutral' };
-    }
-
-    // Calculate average performance
-    const avgGainPercent = sectorStocks.reduce((sum, stock) => sum + stock.gainLossPercent, 0) / sectorStocks.length;
-    const avgDayChange = sectorStocks.reduce((sum, stock) => {
-        return sum + ((stock.dayGainLoss / stock.value) * 100);
-    }, 0) / sectorStocks.length;
-
-    let score = 50; // Neutral baseline
-
-    // Weight based on sector average performance
-    if (avgGainPercent > 15) score += 25;
-    else if (avgGainPercent > 8) score += 15;
-    else if (avgGainPercent > 3) score += 10;
-    else if (avgGainPercent > 0) score += 5;
-    else if (avgGainPercent > -3) score -= 5;
-    else if (avgGainPercent > -8) score -= 15;
-    else score -= 25;
-
-    // Weight based on recent trend
-    if (avgDayChange > 2) score += 15;
-    else if (avgDayChange > 0.5) score += 10;
-    else if (avgDayChange > 0) score += 5;
-    else if (avgDayChange > -0.5) score -= 5;
-    else if (avgDayChange > -2) score -= 10;
-    else score -= 15;
-
-    // Clamp to 0-100 range
-    score = Math.max(0, Math.min(100, score));
-
-    return {
-        score: Math.round(score),
-        label: getSentimentLabel(score)
-    };
-}
-
-// Generate sentiment display HTML
-function generateSentimentDisplay(sentimentData) {
-    const score = sentimentData.score;
-    const barWidth = score;
-
-    let colorClass = 'neutral';
-    if (score >= 70) colorClass = 'very-positive';
-    else if (score >= 60) colorClass = 'positive';
-    else if (score >= 40) colorClass = 'neutral';
-    else if (score >= 30) colorClass = 'negative';
-    else colorClass = 'very-negative';
-
-    return `
-        <div class="sentiment-bar ${colorClass}">
-            <div class="sentiment-fill" style="width: ${barWidth}%"></div>
-            <span class="sentiment-score-text">${score}</span>
-        </div>
-    `;
-}
-
-// Get sentiment label from score
-function getSentimentLabel(score) {
-    if (score >= 80) return 'Very Bullish';
-    if (score >= 65) return 'Bullish';
-    if (score >= 55) return 'Slightly Bullish';
-    if (score >= 45) return 'Neutral';
-    if (score >= 35) return 'Slightly Bearish';
-    if (score >= 20) return 'Bearish';
-    return 'Very Bearish';
-}
-
-// Pastel color palette for charts
-const pastelColors = [
-    '#FFB3BA', // Light Pink
-    '#BAFFC9', // Light Green
-    '#BAE1FF', // Light Blue
-    '#FFFFBA', // Light Yellow
-    '#FFDFBA', // Light Orange
-    '#E0BBE4', // Lavender
-    '#C7CEEA', // Periwinkle
-    '#FFDFD3', // Peach
-    '#B5EAD7', // Mint
-    '#FFE5CC', // Apricot
-    '#D4A5A5', // Dusty Rose
-    '#A8E6CF', // Seafoam
-    '#C3B1E1', // Lilac
-    '#FAD2E1', // Blush
-    '#BEE5D3'  // Sage
-];
 
 let portfolioData = [];
 let accountSummary = { stockValue: null, totalCash: null, availableToInvest: null, totalValue: null, createdAt: null };
@@ -2562,18 +2124,6 @@ function setupTableControls() {
 }
 
 // Handle file upload
-document.getElementById('fileUpload').addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file && file.type === 'text/csv') {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            // Parse new CSV data
-            // Similar parsing logic as in parseCSVData but with uploaded file content
-            console.log('New file uploaded');
-        };
-        reader.readAsText(file);
-    }
-});
 
 // Event handlers
 document.addEventListener('DOMContentLoaded', async () => {
@@ -2765,7 +2315,6 @@ async function processCSVText(csvText) {
                         gicsSector: sectorData, // Store full sector data object
                         country: countryData.country, // Extract country string
                         countryData: countryData, // Store full country data object
-                        financialCalendar: null // Will be populated async
                     });
                 }
             }
@@ -2796,30 +2345,6 @@ async function processCSVText(csvText) {
         }
     });
 
-    // Financial calendar updates
-    console.log('Fetching financial calendar data...');
-    const financialCalendarPromises = data.map(async (stock, index) => {
-        try {
-            const calendar = await getFinancialCalendar(stock.name);
-            data[index].financialCalendar = calendar;
-        } catch (error) {
-            console.log(`Error updating financial calendar for ${stock.name}:`, error);
-        }
-    });
-
-    // Sentiment analysis updates
-    console.log('Calculating sentiment analysis...');
-    const sentimentPromises = data.map(async (stock, index) => {
-        try {
-            const sectorName = stock.sector || getSectorBestGuess(stock.name).sector;
-            const sentimentData = getSentimentBestGuess(stock, sectorName);
-            data[index].stockSentiment = sentimentData.stockSentiment;
-            data[index].sectorSentiment = sentimentData.sectorSentiment;
-        } catch (error) {
-            console.log(`Error calculating sentiment for ${stock.name}:`, error);
-        }
-    });
-
     // Set initial data
     portfolioData = data;
 
@@ -2832,15 +2357,11 @@ async function processCSVText(csvText) {
         return;
     }
 
-    // Wait for all sector, financial calendar, and sentiment updates to complete
-    await Promise.all([
-        Promise.all(sectorUpdatePromises),
-        Promise.all(financialCalendarPromises),
-        Promise.all(sentimentPromises)
-    ]);
-    console.log('GICS sector, geographic, financial calendar, and sentiment analysis updates complete');
+    // Wait for sector and country updates to complete
+    await Promise.all(sectorUpdatePromises);
+    console.log('GICS sector and geographic updates complete');
 
-    // Refresh the dashboard with updated sector, geographic, and financial calendar data
-    console.log('Refreshing dashboard with GICS sector, geographic, and financial calendar data...');
+    // Refresh the dashboard with updated sector and geographic data
+    console.log('Refreshing dashboard with GICS sector and geographic data...');
     updateDashboard();
 }

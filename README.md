@@ -58,18 +58,14 @@ Bands only; the sources publish no exact percentiles. Data: `data/peer-benchmark
 |---|---|---|
 | ONS time series D7G7 | CPI annual rate | none |
 | Alpha Vantage Company Overview | GICS sector and country for holdings not in the holdings map | optional, 25 calls/day free |
-| Finnhub, FMP | Earnings and dividend calendars; keys read, features not surfaced in the current UI | optional |
 
 Alpha Vantage calls run from the browser. Without a key the app uses the holdings map and labels the rest as guesses.
 
-Endpoints: Alpha Vantage `/query?function=OVERVIEW&symbol={symbol}&apikey={key}` (25 calls/day free); Finnhub `/calendar/earnings?from={date}&to={date}&token={key}` (60 calls/minute); FMP `/stock_dividend_calendar?from={date}&to={date}&apikey={key}` (500MB/month).
+Endpoint: Alpha Vantage `/query?function=OVERVIEW&symbol={symbol}&apikey={key}` (25 calls/day free). Earnings and dividend calendars (Finnhub, FMP) were removed as unused; they are in git history if a calendar feature is built.
 
 Standard messages when a source is unavailable:
 
 - Sector: "GICS sector classification requires Alpha Vantage API key. Get free key at: https://www.alphavantage.co/support/#api-key"
-- Earnings: "Earnings calendar requires Finnhub API access. Get free key at: https://finnhub.io/register"
-- Dividends: "Dividend information requires FMP API access. Get free key at: https://site.financialmodelingprep.com/developer/docs"
-- Sentiment: "Real-time sentiment analysis not implemented. Would require integration with verified sentiment API."
 
 ## Data handling
 
@@ -78,7 +74,3 @@ The page is a snapshot of one uploaded export; nothing from it is kept. Rules in
 ## Out of scope
 
 Performance measurement (return vs benchmark, XIRR, TWR): it needs saved exports. Ideas and researched dead ends are in [ROADMAP.md](ROADMAP.md).
-
-## Legacy files
-
-`debug.html`, `test.html`, `list-files.php` are early scaffolding and not used by the current page.
