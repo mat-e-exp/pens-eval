@@ -1120,7 +1120,6 @@ function initializeFileSelection() {
 function tryFindCSVFile() {
     // Try common patterns
     const patterns = [
-        'data/20251001pens-acc-sum.csv',
         'data/account-summary.csv',
         'data/pension-data.csv'
     ];
