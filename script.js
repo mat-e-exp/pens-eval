@@ -2697,7 +2697,7 @@ async function processCSVText(csvText) {
 
     // Account-level lines above the holdings table (HL account summary header)
     accountSummary = { stockValue: null, totalCash: null, availableToInvest: null, totalValue: null, createdAt: null };
-    // Accepts `Total cash:,"35,597.18"`, `Total cash:,35597.18`, `Total cash:, £35,597.18`,
+    // Accepts `Total cash:,"12,345.67"`, `Total cash:,12345.67`, `Total cash:, £12,345.67`,
     // trailing \r, and label variants without the colon.
     const headerNumber = (label) => {
         const key = label.replace(/:$/, '').toLowerCase();
