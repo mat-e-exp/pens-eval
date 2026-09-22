@@ -10,7 +10,7 @@ Last updated 2026-09-22.
 
 The portfolio's own return cannot be computed. One snapshot has no purchase dates and no cashflows. Until that is fixed the tool can say what the alternatives returned but not whether this portfolio beat them. Do not approximate from cost basis; see `CLAUDE.md` → Performance Measurement.
 
-**Snapshots held:** `data/live/20251001pens-acc-sum.csv` only. The 12 Sep 2026 export was loaded through the browser upload, which does not write to disk, so it is not saved. Recover it and drop it in `data/live/` before it is lost.
+**Snapshots held:** one, in `data/live/`. A later export was loaded through the browser upload, which does not write to disk, so it is not saved. Recover it and drop it in `data/live/` before it is lost.
 
 ---
 
@@ -42,7 +42,7 @@ Investment trusts work, so the comparison set is not limited to trackers. Store 
 
 ## 3. Fee drag
 
-Cost of running 44 positions against holding one fund. HL SIPP charges are published. Arithmetic only, hand-maintained figure with a source and a date. The share dealing charge is now in `data/platform-charges.json` and used for plan and exit costs; the platform percentage fee is not yet held.
+Cost of running a multi-stock portfolio against holding one fund. HL SIPP charges are published. Arithmetic only, hand-maintained figure with a source and a date. The share dealing charge is now in `data/platform-charges.json` and used for plan and exit costs; the platform percentage fee is not yet held.
 
 ## 4. Risk measures not present
 
@@ -56,14 +56,14 @@ Cheaper and buildable without new data: a stress view that recomputes withdrawal
 
 The Investment Association classifies funds into sectors but collects no performance data. Morningstar supplies limited sector averages back to the IA. Trustnet and Morningstar hold the real quartile tables. All of it is web pages and licensed vendor data with no free API. Nothing is machine-readable or licence-clean enough to use here. Do not re-research this.
 
-This portfolio is 44 self-picked stocks, not a fund, so no league table has an entry for it in any case. Section 2 is the answer to that question.
+A portfolio of self-picked stocks is not a fund, so no league table has an entry for it in any case. Section 2 is the answer to that question.
 
 ---
 
 ## Known debt
 
 - **Finnhub and FMP keys are read and cached but nothing renders.** Dead code path. Either surface an earnings and dividend calendar or strip it.
-- **Benchmark selection is not remembered** and resets to MSCI World on reload. Composition comparison against an index is weak for a portfolio that is around 88% US-listed. Section 2 matters more than fixing this.
+- **Benchmark selection is not remembered** and resets to MSCI World on reload. Composition comparison against a global index is weak for a mostly US-listed portfolio. Section 2 matters more than fixing this.
 - **`debug.html`, `test.html`, `list-files.php`** are early scaffolding, unused by the current page.
 - **No browser-level testing.** Every change this session was verified headlessly in node. Layout and chart rendering are unverified.
 

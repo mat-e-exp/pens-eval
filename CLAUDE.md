@@ -25,6 +25,12 @@ Narrow market (UK pension holders), strong free competition (Vanguard, Fidelity,
 
 ---
 
+## Public Repository
+
+The GitHub repo is public. Tracked files (code, comments, docs, commit messages) must contain no facts from the real portfolio: no values, cash balances, holding counts, weights, holding names or dates of exports. Use neutral examples (`12,345.67`) or `data/test/`. Real data stays in git-ignored paths (`data/live/`, `data/holdings-map.json`).
+
+---
+
 ## Data Integrity Standards
 
 ### NO MOCK DATA POLICY
