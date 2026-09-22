@@ -6,7 +6,6 @@
     <title>Pension Evaluation Dashboard</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
@@ -182,6 +181,7 @@
                         </div>
                         <div class="bench-panel">
                             <h3>Holdings below cost</h3>
+                            <p class="section-note">In a SIPP there is no capital gains tax and no loss relief, so the price paid has no effect on the result of selling or holding. The rise to break even is context, not a reason to hold.</p>
                             <div class="sector-table-wrapper"><table class="bench-table" id="reviewLosersTable"></table></div>
                         </div>
                     </div>
@@ -237,23 +237,6 @@
                     <summary>Geographic distribution</summary>
                     <div id="worldMap" style="height: 520px; border-radius: 10px;"></div>
                     <div class="legend" id="countryLegend"></div>
-                </details>
-
-                <details class="sub">
-                    <summary>Market cap and performance bands</summary>
-                    <p class="section-note">Market cap band is a name-based guess in code, not sourced data.</p>
-                    <div class="main-grid">
-                        <div>
-                            <h3>Market Cap Distribution</h3>
-                            <canvas id="marketCapChart"></canvas>
-                            <div class="legend" id="marketCapLegend"></div>
-                        </div>
-                        <div>
-                            <h3>Performance Bands</h3>
-                            <canvas id="performanceChart"></canvas>
-                            <div class="legend" id="performanceLegend"></div>
-                        </div>
-                    </div>
                 </details>
 
                 <details class="sub">

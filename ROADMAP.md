@@ -2,7 +2,7 @@
 
 Future enhancements and the findings behind them. Not a spec. Current behaviour is in `README.md`; data rules are in `CLAUDE.md`.
 
-Last updated 2026-09-15.
+Last updated 2026-09-22.
 
 ---
 
@@ -42,7 +42,7 @@ Investment trusts work, so the comparison set is not limited to trackers. Store 
 
 ## 3. Fee drag
 
-Cost of running 44 positions against holding one fund. HL SIPP charges are published. Arithmetic only, hand-maintained figure with a source and a date.
+Cost of running 44 positions against holding one fund. HL SIPP charges are published. Arithmetic only, hand-maintained figure with a source and a date. The share dealing charge is now in `data/platform-charges.json` and used for plan and exit costs; the platform percentage fee is not yet held.
 
 ## 4. Risk measures not present
 
@@ -62,7 +62,6 @@ This portfolio is 44 self-picked stocks, not a fund, so no league table has an e
 
 ## Known debt
 
-- **Market cap band is generated in code.** A name-based guess with a "Large Cap" default for anything unrecognised. This breaks the no-mock-data rule in `CLAUDE.md`. Either source it from Alpha Vantage Company Overview alongside the sector call, or remove the chart.
 - **Finnhub and FMP keys are read and cached but nothing renders.** Dead code path. Either surface an earnings and dividend calendar or strip it.
 - **Benchmark selection is not remembered** and resets to MSCI World on reload. Composition comparison against an index is weak for a portfolio that is around 88% US-listed. Section 2 matters more than fixing this.
 - **`debug.html`, `test.html`, `list-files.php`** are early scaffolding, unused by the current page.

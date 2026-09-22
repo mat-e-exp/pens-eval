@@ -62,6 +62,10 @@ const HOLDINGS_MAP_SOURCE = 'Holdings map (data/holdings-map.json)';
 // Static benchmark composition (data/benchmarks.json)
 let benchmarks = null;
 
+// Platform dealing charges (data/platform-charges.json): HL SIPP online share
+// deal charge, hand-maintained from HL's published tariff.
+let charges = null;
+
 // UK CPI annual rate, ONS time series D7G7 (CPI ANNUAL RATE 00: ALL ITEMS 2015=100).
 // Public JSON endpoint, CORS-enabled, no key. Latest monthly print only.
 const ONS_CPI_URL = 'https://www.ons.gov.uk/economy/inflationandpriceindices/timeseries/d7g7/mm23/data';
@@ -106,6 +110,16 @@ async function loadCPI() {
         cpi = null;
         cpiError = error.message;
         console.warn('ONS CPI fetch failed:', error);
+    }
+}
+
+async function loadCharges() {
+    try {
+        const response = await fetch('data/platform-charges.json?t=' + Date.now());
+        if (!response.ok) { console.warn('platform-charges.json not found; dealing costs not shown'); return; }
+        charges = (await response.json()).hl_sipp || null;
+    } catch (error) {
+        console.warn('Error loading platform charges:', error);
     }
 }
 
@@ -210,43 +224,6 @@ const GICS_SECTORS = {
     'Utilities': 'Utilities'
 };
 
-
-// Intelligent market cap guessing based on well-known companies
-const getMarketCapBestGuess = (stockName) => {
-    const name = stockName.toLowerCase();
-
-    // Large Cap indicators (>$100B) - well-known mega caps
-    const largeCaps = ['apple', 'microsoft', 'amazon', 'google', 'alphabet', 'meta', 'facebook', 'tesla', 'nvidia',
-                      'berkshire', 'visa', 'johnson', 'walmart', 'jpmorgan', 'exxon', 'mastercard', 'pfizer',
-                      'coca cola', 'disney', 'intel', 'cisco', 'oracle', 'adobe', 'salesforce', 'netflix'];
-
-    // Mid Cap indicators ($10B-$100B) - well-known mid-size companies
-    const midCaps = ['airbnb', 'zoom', 'snowflake', 'palantir', 'servicenow', 'crowdstrike', 'datadog', 'okta',
-                     'peloton', 'robinhood', 'dropbox', 'square', 'block', 'coinbase', 'uber', 'lyft'];
-
-    for (let largeCap of largeCaps) {
-        if (name.includes(largeCap)) {
-            return { marketCap: 'Large Cap (>$100B)', source: 'Intelligent guess based on well-known large company' };
-        }
-    }
-
-    for (let midCap of midCaps) {
-        if (name.includes(midCap)) {
-            return { marketCap: 'Mid Cap ($10B-$100B)', source: 'Intelligent guess based on well-known mid-cap company' };
-        }
-    }
-
-    // Default based on portfolio context - most pension funds are weighted toward large caps
-    return { marketCap: 'Large Cap (>$100B)', source: 'Default assumption - pension funds typically hold large cap stocks' };
-};
-
-// Market cap categories with intelligent fallbacks
-const getMarketCapCategory = (stockName) => {
-    // Could integrate with financial APIs here in the future for real market cap data
-    const guess = getMarketCapBestGuess(stockName);
-    console.log(`Market cap for ${stockName}: "${guess.marketCap}" (Source: ${guess.source})`);
-    return guess;
-};
 
 // Intelligent geographic guessing based on common patterns
 const getGeographicBestGuess = (stockName) => {
@@ -1100,7 +1077,6 @@ const pastelColors = [
 
 let portfolioData = [];
 let accountSummary = { stockValue: null, totalCash: null, availableToInvest: null, totalValue: null, createdAt: null };
-let charts = {};
 let currentFile = null;
 let availableFiles = [];
 
@@ -1277,8 +1253,6 @@ function updateDashboard() {
     createPortfolioReview();
     createDrawdownReview();
     createWorldMap();
-    createMarketCapChart();
-    createPerformanceChart();
 
     // Update top/bottom performers
     updatePerformers();
@@ -1582,6 +1556,22 @@ function readRules() {
     };
 }
 
+// Small positions classified by their sector's gap to the benchmark (portfolio
+// minus index, points of invested value). Uses only the snapshot and benchmarks.json.
+//   Top up: sector more than the band under the index; topping up closes the gap.
+//   Exit:   sector at or over the index; proceeds can fund gaps elsewhere.
+//   Either: sector under the index but within the band.
+function smallPositionStances(holdings, rules, bench) {
+    const sectorWeight = {};
+    holdings.forEach(h => { sectorWeight[h.sector] = (sectorWeight[h.sector] || 0) + h.weight; });
+    return holdings.filter(h => h.weight < rules.minPosition).map(h => {
+        if (!bench) return { ...h, gap: null, stance: '—' };
+        const gap = sectorWeight[h.sector] - (bench.sectors[h.sector] || 0);
+        const stance = gap < -rules.sectorBand ? 'Top up' : gap >= 0 ? 'Exit' : 'Either';
+        return { ...h, gap, stance };
+    });
+}
+
 function createPortfolioReview() {
     const rules = readRules();
     const gbp = n => '£' + Math.round(n).toLocaleString('en-GB');
@@ -1597,6 +1587,8 @@ function createPortfolioReview() {
         gainLossPercent: s.gainLossPercent, sector: s.sector || 'Unclassified',
         country: s.country || 'Unknown', weight: invested ? s.value / invested * 100 : 0
     }));
+    const benchKey = document.getElementById('benchmarkSelect').value;
+    const bench = benchmarks ? benchmarks[benchKey] : null;
 
     // ---- Flags ----
     const flags = [];
@@ -1613,13 +1605,18 @@ function createPortfolioReview() {
         text: `Largest position ${pct(port.largest)}, top 10 ${pct(port.top10)}, ${port.count} holdings but ${port.effectiveN.toFixed(0)} effective (1/HHI). ` +
               (over.length ? `${over.length} above the ${pct(rules.maxPosition)} cap: ${over.map(h => h.name).join(', ')}.` : `None above the ${pct(rules.maxPosition)} cap.`)
     });
-    const small = holdings.filter(h => h.weight < rules.minPosition).sort((a, b) => a.weight - b.weight);
+    const small = smallPositionStances(holdings, rules, bench).sort((a, b) => a.weight - b.weight);
     const smallWeight = small.reduce((sum, h) => sum + h.weight, 0);
+    const count = stance => small.filter(h => h.stance === stance).length;
     flags.push({
         level: small.length ? 'warn' : 'ok',
         title: 'Small positions',
         text: small.length
-            ? `${small.length} holdings under ${pct(rules.minPosition)} each, ${pct(smallWeight)} combined. Too small to affect the outcome; consolidate or size with intent.`
+            ? `${small.length} holdings under ${pct(rules.minPosition)} each, ${pct(smallWeight)} of invested value combined. ` +
+              `Each is too small to move the result alone; together they are not. ` +
+              (bench ? `Against ${bench.name}: ${count('Top up')} in sectors more than ${rules.sectorBand} pts under the index (top-up candidates; the plan fills these first when there is cash to deploy), ` +
+                       `${count('Exit')} in sectors at or over the index (exit candidates), ${count('Either')} in between. ` : '') +
+              (charges ? `Exiting all costs ${gbp(small.length * charges.share_deal_online)} in dealing (${small.length} × £${charges.share_deal_online.toFixed(2)}).` : '')
             : `No holdings under ${pct(rules.minPosition)}.`
     });
     document.getElementById('reviewFlags').innerHTML = flags.map(f => `
@@ -1630,10 +1627,11 @@ function createPortfolioReview() {
 
     // ---- Small positions table ----
     document.getElementById('reviewSmallTable').innerHTML = small.length ? `
-        <thead><tr><th>Holding</th><th class="num">Weight</th><th class="num">Value</th><th class="num">P/L</th><th class="num">P/L %</th></tr></thead>
+        <thead><tr><th>Holding</th><th class="num">Weight</th><th class="num">Value</th><th class="num">P/L</th><th class="num">P/L %</th><th>Sector vs index</th><th>Suggests</th></tr></thead>
         <tbody>${small.map(h => `<tr><td>${h.name}</td><td class="num">${pct(h.weight)}</td><td class="num">${gbp(h.value)}</td>
             <td class="num ${h.gainLoss >= 0 ? 'positive' : 'negative'}">${gbp(h.gainLoss)}</td>
-            <td class="num ${h.gainLoss >= 0 ? 'positive' : 'negative'}">${pct(h.gainLossPercent)}</td></tr>`).join('')}</tbody>`
+            <td class="num ${h.gainLoss >= 0 ? 'positive' : 'negative'}">${pct(h.gainLossPercent)}</td>
+            <td>${h.gap === null ? '—' : `${h.sector} ${h.gap > 0 ? '+' : ''}${h.gap.toFixed(1)} pts`}</td><td>${h.stance}</td></tr>`).join('')}</tbody>`
         : '<tbody><tr><td class="section-note">None.</td></tr></tbody>';
 
     // ---- Losers with recovery required ----
@@ -1650,8 +1648,6 @@ function createPortfolioReview() {
         : '<tbody><tr><td class="section-note">No holdings below cost.</td></tr></tbody>';
 
     // ---- Sector bets vs selected benchmark, decomposed into the names driving them ----
-    const benchKey = document.getElementById('benchmarkSelect').value;
-    const bench = benchmarks ? benchmarks[benchKey] : null;
     const betsEl = document.getElementById('reviewBets');
     if (bench) {
         const bySector = {};
@@ -1688,7 +1684,9 @@ function createPortfolioReview() {
     const dd = readDrawdownRules();
     const plan = buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules, bench, withdrawal: dd.withdrawal, runwayFloor: dd.runwayFloor });
 
-    document.getElementById('reviewPlanNote').textContent = plan.reserveNote;
+    document.getElementById('reviewPlanNote').textContent = plan.reserveNote + ' ' + (plan.dealing
+        ? `Dealing: ${plan.dealing.deals} Trim/Buy deals × £${plan.dealing.rate.toFixed(2)} = ${gbp(plan.dealing.cost)} (HL SIPP online share deal from ${charges.effective}; £${charges.share_deal_frequent.toFixed(2)} after ${charges.frequent_condition}).`
+        : 'Dealing charges unavailable: data/platform-charges.json not found.');
 
     document.getElementById('reviewActionsTable').innerHTML = plan.actions.length ? `
         <thead><tr><th>Action</th><th>Holding / sector</th><th class="num">Amount</th><th>Reason</th></tr></thead>
@@ -1801,12 +1799,11 @@ function renderSummaryStrip() {
 }
 
 // Section behaviour: remembered open state, tile-to-section jumps, and
-// chart/map resize when a hidden container becomes visible.
+// map resize when a hidden container becomes visible.
 const OPEN_STATE_PREFIX = 'pensEval.open.';
 function initSections() {
     const refreshVisuals = () => setTimeout(() => {
         if (window.map && window.map.invalidateSize) window.map.invalidateSize();
-        Object.values(charts).forEach(c => { if (c && c.resize) c.resize(); });
     }, 60);
     document.querySelectorAll('details.section').forEach(d => {
         try { if (localStorage.getItem(OPEN_STATE_PREFIX + d.id) === '1') d.open = true; } catch (e) { /* ignore */ }
@@ -1836,12 +1833,14 @@ function initSections() {
 //      the deployable pool.
 //   3. Allocation: the pool is spread across sectors more than sectorBand points
 //      under the benchmark, in proportion to each gap and capped at the gap, so
-//      no sector overshoots the index. Each buy is also capped at the max
-//      position. Anything left stays as cash.
-//   4. Before/after: the same concentration and sector measures on the
+//      no sector overshoots the index. Within a sector: holdings under the
+//      minimum position are topped up to it first, then larger holdings largest
+//      first up to the max position, then new positions. Anything left stays as cash.
+//   4. Dealing: one HL online share deal per Trim/Buy (data/platform-charges.json).
+//   5. Before/after: the same concentration and sector measures on the
 //      hypothetical portfolio if every action is taken.
-// Small positions are listed as decisions, not netted: exit or top-up is a
-// judgement the rules cannot make.
+// Small positions the plan does not top up are listed as one decision, not
+// netted: exit or top-up is a judgement the rules cannot make.
 // ---------------------------------------------------------------------------
 function concentrationStats(values, bench, band) {
     const total = values.reduce((s, v) => s + v.value, 0);
@@ -1912,6 +1911,7 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
     // Position caps are tested against the invested total as it grows, so no
     // holding ends above maxPosition after the plan.
     let unallocated = poolAfterReserve;
+    const toppedUp = new Set();   // sub-minimum holdings the plan buys into; excluded from the Decide row
     if (bench && poolAfterReserve > 0) {
         const cap = rules.maxPosition / 100;
         const investedNow = () => work.reduce((s, h) => s + h.value, 0);
@@ -1931,17 +1931,35 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
             gaps.sort((a, b) => b.need - a.need).forEach(g => {
                 let remaining = g.need * scale;
                 const gapPts = (g.b - g.curPts).toFixed(1);
-                // Top-up candidates: existing holdings at or above the minimum position,
-                // largest first. Sub-minimum holdings are a Decide row, not an automatic buy.
                 const minValue = investedTarget * rules.minPosition / 100;
+                // Sub-minimum holdings in an under-index sector are filled first, to the
+                // minimum: this closes the gap and removes a too-small position at once.
+                const smallHere = work.filter(h => h.sector === g.name && !h.name.startsWith('New: ') && h.value < minValue)
+                    .sort((a, b) => b.value - a.value);
+                for (const h of smallHere) {
+                    if (remaining < 1) break;
+                    const amount = Math.min(remaining, minValue - h.value, headroom(h.value));
+                    if (amount < 1) continue;
+                    actions.push({ kind: 'Buy', name: `${g.name} → ${h.name}`, amount,
+                        why: `Sector ${gapPts} pts under ${bench.name}. Under the ${pct(rules.minPosition)} minimum, so topped up to it before larger holdings or a new position.` });
+                    h.value += amount; remaining -= amount; unallocated -= amount; toppedUp.add(h.name);
+                }
+                // Then existing holdings at or above the minimum, largest first, up to the cap.
                 const existing = work.filter(h => h.sector === g.name && !h.name.startsWith('New: ') && h.value >= minValue)
                     .sort((a, b) => b.value - a.value);
                 for (const h of existing) {
                     if (remaining < 1) break;
                     const amount = Math.min(remaining, headroom(h.value));
                     if (amount < 1) continue;
-                    actions.push({ kind: 'Buy', name: `${g.name} → ${h.name}`, amount,
-                        why: `Sector ${gapPts} pts under ${bench.name}. Top up existing holdings largest first; stops at the ${pct(rules.maxPosition)} position cap. Holdings under the minimum are left to the Decide row.` });
+                    // A holding already topped up to the minimum above: one deal, one row.
+                    const prior = toppedUp.has(h.name) && actions.find(a => a.kind === 'Buy' && a.name === `${g.name} → ${h.name}`);
+                    if (prior) {
+                        prior.amount += amount;
+                        prior.why = `Sector ${gapPts} pts under ${bench.name}. Under the ${pct(rules.minPosition)} minimum, so topped up first, then with the other holdings up to the ${pct(rules.maxPosition)} position cap.`;
+                    } else {
+                        actions.push({ kind: 'Buy', name: `${g.name} → ${h.name}`, amount,
+                            why: `Sector ${gapPts} pts under ${bench.name}. Top up existing holdings largest first; stops at the ${pct(rules.maxPosition)} position cap.` });
+                    }
                     h.value += amount; remaining -= amount; unallocated -= amount;
                 }
                 let n = 1;
@@ -1963,13 +1981,24 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
         why: bench ? `Left after closing every sector gap more than ${rules.sectorBand} pts under the index. Above the reserve; deploy at your discretion or raise the reserve.`
                    : 'Benchmark data unavailable, so no sector allocation was made.' });
 
-    // Small positions: one summary row. Exit or top-up is a judgement the rules cannot make.
-    const small = holdings.filter(h => h.weight < rules.minPosition);
+    // Dealing: one online share deal per Trim or Buy row, at the standard rate
+    // (the frequent-trader rate depends on the previous month's deal count).
+    const deals = actions.filter(a => a.kind === 'Trim' || a.kind === 'Buy').length;
+    const dealing = charges ? { deals, cost: deals * charges.share_deal_online, rate: charges.share_deal_online } : null;
+
+    // Small positions the plan did not top up: one summary row. Exit or top-up
+    // is a judgement the rules cannot make; the stance split informs it.
+    const small = smallPositionStances(holdings, rules, bench).filter(h => !toppedUp.has(h.name));
     if (small.length) {
         const topUp = small.reduce((s, h) => s + (invested * rules.minPosition / 100 - h.value), 0);
         const release = small.reduce((s, h) => s + h.value, 0);
-        actions.push({ kind: 'Decide', name: `${small.length} holdings under ${pct(rules.minPosition)}`, amount: topUp,
-            why: `Top up all to the minimum for ${gbp(topUp)}, or exit all and release ${gbp(release)}. Per-holding figures in the Small positions table. Not included in the after-plan figures.` });
+        const exits = small.filter(h => h.stance === 'Exit');
+        const exitRelease = exits.reduce((s, h) => s + h.value, 0);
+        const deal = n => charges ? `, dealing ${gbp(n * charges.share_deal_online)}` : '';
+        actions.push({ kind: 'Decide', name: `${small.length} holdings under ${pct(rules.minPosition)}${toppedUp.size ? ' not topped up above' : ''}`, amount: topUp,
+            why: `Top up all to the minimum for ${gbp(topUp)}, or exit all and release ${gbp(release)}${deal(small.length)}. ` +
+                 (bench ? `${exits.length} are in sectors at or over ${bench.name} (exit candidates, ${gbp(exitRelease)}${deal(exits.length)}). ` : '') +
+                 `Per-holding figures in the Small positions table. Not included in the after-plan figures.` });
     }
 
     // 4. Before / after
@@ -1979,7 +2008,7 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
     const accountAfter = afterStats.invested + cashAfterClean;
     const overCap = stats => stats.weights.filter(h => h.weight > rules.maxPosition + 1e-9).length;
     return {
-        reserve, reserveNote, actions,
+        reserve, reserveNote, actions, dealing,
         before: { cash, cashPct: accountTotal ? cash / accountTotal * 100 : 0, invested: beforeStats.invested, largest: beforeStats.largest, top10: beforeStats.top10,
                   effectiveN: beforeStats.effectiveN, overCap: overCap(beforeStats), sectorsOut: beforeStats.sectorsOut, maxGap: beforeStats.maxGap },
         after:  { cash: cashAfterClean, cashPct: accountAfter ? cashAfterClean / accountAfter * 100 : 0, invested: afterStats.invested, largest: afterStats.largest, top10: afterStats.top10,
@@ -2378,165 +2407,6 @@ function createWorldMap() {
     legendEl.appendChild(sourceInfo);
 }
 
-// Create market cap distribution donut chart
-function createMarketCapChart() {
-    const ctx = document.getElementById('marketCapChart').getContext('2d');
-    const marketCapData = {};
-
-    portfolioData.forEach(stock => {
-        if (!marketCapData[stock.marketCap]) {
-            marketCapData[stock.marketCap] = 0;
-        }
-        marketCapData[stock.marketCap] += stock.value;
-    });
-
-    const sortedMarketCaps = Object.entries(marketCapData).sort((a, b) => {
-        const order = ['Large Cap (>$100B)', 'Mid Cap ($10B-$100B)', 'Small Cap (<$10B)'];
-        return order.indexOf(a[0]) - order.indexOf(b[0]);
-    });
-
-    if (charts.marketCap) charts.marketCap.destroy();
-
-    charts.marketCap = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: sortedMarketCaps.map(m => m[0]),
-            datasets: [{
-                data: sortedMarketCaps.map(m => m[1]),
-                backgroundColor: ['#FFFFBA', '#FFDFBA', '#E0BBE4'],
-                borderColor: '#1a1a1a',
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const value = context.parsed;
-                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                            const percentage = ((value / total) * 100).toFixed(1);
-                            return `${context.label}: £${value.toLocaleString('en-GB', {minimumFractionDigits: 2})} (${percentage}%)`;
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    // Create custom legend
-    const legendEl = document.getElementById('marketCapLegend');
-    legendEl.innerHTML = '';
-    sortedMarketCaps.forEach((cap, index) => {
-        const item = document.createElement('div');
-        item.className = 'legend-item';
-        item.innerHTML = `
-            <span class="legend-color" style="background: ${['#FFFFBA', '#FFDFBA', '#E0BBE4'][index]}"></span>
-            <span>${cap[0]} (${((cap[1] / portfolioData.reduce((sum, s) => sum + s.value, 0)) * 100).toFixed(1)}%)</span>
-        `;
-        legendEl.appendChild(item);
-    });
-
-    // Add data source summary for market cap
-    const sourceInfo = document.createElement('div');
-    sourceInfo.className = 'data-source-info';
-    sourceInfo.innerHTML = `
-        <div class="source-title">Market Cap Data Sources:</div>
-        <div class="source-breakdown">
-            <span class="source-guess">🧠 All classifications based on intelligent pattern recognition</span>
-        </div>
-    `;
-    legendEl.appendChild(sourceInfo);
-}
-
-// Create performance distribution donut chart
-function createPerformanceChart() {
-    const ctx = document.getElementById('performanceChart').getContext('2d');
-    const performanceBands = {
-        'Strong Gain (>50%)': 0,
-        'Moderate Gain (20-50%)': 0,
-        'Small Gain (0-20%)': 0,
-        'Small Loss (0-20%)': 0,
-        'Moderate Loss (20-50%)': 0,
-        'Large Loss (>50%)': 0
-    };
-
-    portfolioData.forEach(stock => {
-        const perf = stock.gainLossPercent;
-        if (perf > 50) performanceBands['Strong Gain (>50%)'] += stock.value;
-        else if (perf > 20) performanceBands['Moderate Gain (20-50%)'] += stock.value;
-        else if (perf > 0) performanceBands['Small Gain (0-20%)'] += stock.value;
-        else if (perf > -20) performanceBands['Small Loss (0-20%)'] += stock.value;
-        else if (perf > -50) performanceBands['Moderate Loss (20-50%)'] += stock.value;
-        else performanceBands['Large Loss (>50%)'] += stock.value;
-    });
-
-    const filteredBands = Object.entries(performanceBands).filter(b => b[1] > 0);
-
-    if (charts.performance) charts.performance.destroy();
-
-    charts.performance = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: filteredBands.map(b => b[0]),
-            datasets: [{
-                data: filteredBands.map(b => b[1]),
-                backgroundColor: ['#B5EAD7', '#C7CEEA', '#FFDFD3', '#FFE5CC', '#FFB3BA', '#D4A5A5'],
-                borderColor: '#1a1a1a',
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const value = context.parsed;
-                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                            const percentage = ((value / total) * 100).toFixed(1);
-                            return `${context.label}: £${value.toLocaleString('en-GB', {minimumFractionDigits: 2})} (${percentage}%)`;
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    // Create custom legend
-    const legendEl = document.getElementById('performanceLegend');
-    legendEl.innerHTML = '';
-    filteredBands.forEach((band, index) => {
-        const item = document.createElement('div');
-        item.className = 'legend-item';
-        item.innerHTML = `
-            <span class="legend-color" style="background: ${['#B5EAD7', '#C7CEEA', '#FFDFD3', '#FFE5CC', '#FFB3BA', '#D4A5A5'][index]}"></span>
-            <span>${band[0]} (${((band[1] / portfolioData.reduce((sum, s) => sum + s.value, 0)) * 100).toFixed(1)}%)</span>
-        `;
-        legendEl.appendChild(item);
-    });
-
-    // Add data source summary for performance bands
-    const sourceInfo = document.createElement('div');
-    sourceInfo.className = 'data-source-info';
-    sourceInfo.innerHTML = `
-        <div class="source-title">Performance Data Sources:</div>
-        <div class="source-breakdown">
-            <span class="source-api">📊 All performance data from CSV portfolio file</span>
-        </div>
-    `;
-    legendEl.appendChild(sourceInfo);
-}
-
 // Update top and bottom performers
 function updatePerformers() {
     const sortedByGain = [...portfolioData].sort((a, b) => b.gainLossPercent - a.gainLossPercent);
@@ -2709,7 +2579,7 @@ document.getElementById('fileUpload').addEventListener('change', (e) => {
 // Event handlers
 document.addEventListener('DOMContentLoaded', async () => {
     // Load static holdings classification and benchmark data, then API keys
-    await Promise.all([loadHoldingsMap(), loadBenchmarks(), loadCPI(), loadPeerBenchmarks()]);
+    await Promise.all([loadHoldingsMap(), loadBenchmarks(), loadCPI(), loadPeerBenchmarks(), loadCharges()]);
     await loadAPIKeys();
 
     document.getElementById('benchmarkSelect').addEventListener('change', () => {
@@ -2896,7 +2766,6 @@ async function processCSVText(csvText) {
                         gicsSector: sectorData, // Store full sector data object
                         country: countryData.country, // Extract country string
                         countryData: countryData, // Store full country data object
-                        marketCap: getMarketCapBestGuess(stockName).marketCap,
                         financialCalendar: null // Will be populated async
                     });
                 }

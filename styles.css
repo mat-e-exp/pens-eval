@@ -128,8 +128,6 @@ body {
     color: #ff9aa2;
 }
 
-}
-
 .main-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);

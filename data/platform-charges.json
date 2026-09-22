@@ -1,0 +1,13 @@
+{
+ "notes": "Platform dealing charges. Refresh by hand from the source below when HL changes its tariff.",
+ "hl_sipp": {
+  "name": "Hargreaves Lansdown SIPP",
+  "share_deal_online": 6.95,
+  "share_deal_frequent": 3.95,
+  "frequent_condition": "more than 20 deals in the previous month",
+  "applies_to": "shares, ETFs and investment trusts, online",
+  "effective": "2026-03-01",
+  "source": "https://www.hl.co.uk/accounts/fee-changes",
+  "checked": "2026-09-22"
+ }
+}

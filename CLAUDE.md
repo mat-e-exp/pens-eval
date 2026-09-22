@@ -90,6 +90,10 @@ When real data cannot be accessed:
 - ✅ Age band is user input, stored in localStorage. Never inferred.
 - ❌ Bands only. Never interpolate an exact percentile. No secondary-site figures (they conflict with the primary tables).
 
+**Dealing Charges (Portfolio Review, Rebalance Plan)**
+- ✅ `data/platform-charges.json`: HL SIPP online share deal charge, hand-maintained from hl.co.uk/accounts/fee-changes (`effective`, `checked`, `source` in the file). Standard rate only; the frequent-trader rate depends on last month's deal count.
+- ❌ No charge figures from secondary sites.
+
 **Benchmark Composition (Benchmark Comparison section)**
 - ✅ Static index snapshots in `data/benchmarks.json`, hand-refreshed from the sources named in the file (`as_of` per benchmark).
 - ❌ No benchmark return figures. Composition only.
