@@ -62,6 +62,15 @@ Bands only; the sources publish no exact percentiles. Data: `data/peer-benchmark
 
 Alpha Vantage calls run from the browser. Without a key the app uses the holdings map and labels the rest as guesses.
 
+Endpoints: Alpha Vantage `/query?function=OVERVIEW&symbol={symbol}&apikey={key}` (25 calls/day free); Finnhub `/calendar/earnings?from={date}&to={date}&token={key}` (60 calls/minute); FMP `/stock_dividend_calendar?from={date}&to={date}&apikey={key}` (500MB/month).
+
+Standard messages when a source is unavailable:
+
+- Sector: "GICS sector classification requires Alpha Vantage API key. Get free key at: https://www.alphavantage.co/support/#api-key"
+- Earnings: "Earnings calendar requires Finnhub API access. Get free key at: https://finnhub.io/register"
+- Dividends: "Dividend information requires FMP API access. Get free key at: https://site.financialmodelingprep.com/developer/docs"
+- Sentiment: "Real-time sentiment analysis not implemented. Would require integration with verified sentiment API."
+
 ## Data handling
 
 The page is a snapshot of one uploaded export; nothing from it is kept. Rules in `CLAUDE.md` → Data Handling. `hooks/check_portfolio_data.py` blocks real-portfolio data from commits, alongside devflow's checks (`.devflow/`). Install both once per clone with `sh hooks/install.sh`.
