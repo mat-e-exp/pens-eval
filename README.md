@@ -62,9 +62,13 @@ Bands only; the sources publish no exact percentiles. Data: `data/peer-benchmark
 
 Alpha Vantage calls run from the browser. Without a key the app uses the holdings map and labels the rest as guesses.
 
-## Not built
+## Data handling
 
-Return vs benchmark (XIRR, TWR). Needs two or more dated HL exports plus a transaction-history export; see `CLAUDE.md` → Performance Measurement. Planned work and researched dead ends are in [ROADMAP.md](ROADMAP.md).
+The page is a snapshot of one uploaded export; nothing from it is kept. Rules in `CLAUDE.md` → Data Handling. Git hooks in `hooks/` block real-portfolio data from commits; install once per clone with `git config core.hooksPath hooks`.
+
+## Out of scope
+
+Performance measurement (return vs benchmark, XIRR, TWR): it needs saved exports. Ideas and researched dead ends are in [ROADMAP.md](ROADMAP.md).
 
 ## Legacy files
 

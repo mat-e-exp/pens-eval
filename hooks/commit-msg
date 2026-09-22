@@ -1,0 +1,2 @@
+#!/bin/sh
+exec python3 hooks/check_portfolio_data.py --message "$1"

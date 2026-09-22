@@ -25,9 +25,15 @@ Narrow market (UK pension holders), strong free competition (Vanguard, Fidelity,
 
 ---
 
-## Public Repository
+## Data Handling
 
-The GitHub repo is public. Tracked files (code, comments, docs, commit messages) must contain no facts from the real portfolio: no values, cash balances, holding counts, weights, holding names or dates of exports. Use neutral examples (`12,345.67`) or `data/test/`. Real data stays in git-ignored paths (`data/live/`, `data/holdings-map.json`).
+The page is a snapshot of one uploaded HL export. Nothing from an uploaded file is kept, recorded or documented. The GitHub repo is public.
+
+- **Upload is in memory only.** No CSV-derived data is written to disk, browser storage, the server, logs or any file. `localStorage` holds only UI state and user-typed inputs (section open state, age band, annual withdrawal).
+- **Nothing real in tracked files.** Code, comments, docs, commit messages and Claude memory contain no facts from a real portfolio: no values, cash balances, holding counts, weights, holding lines or export dates. Examples use neutral figures (`12,345.67`) or `data/test/`.
+- **Third parties get ticker symbols only**, never amounts or quantities.
+- **No feature may need saved exports.** Anything that depends on history is out of scope.
+- **Enforced by git hooks** in `hooks/` (install per clone: `git config core.hooksPath hooks`). They block staged files under `data/` outside an allowlist, HL header lines, and any figure or holding line from a real export present locally. The hooks are a backstop, not a substitute for reading the diff.
 
 ---
 
@@ -213,15 +219,9 @@ Use these specific error messages:
 **Market Sentiment:**
 "Real-time sentiment analysis not implemented. Would require integration with verified sentiment API."
 
-## Performance Measurement (not yet built)
+## Performance Measurement (out of scope)
 
-Return vs benchmark (XIRR, TWR) cannot be computed from a single HL portfolio snapshot: no purchase dates, no cashflows. Prerequisites before building:
-
-1. Monthly HL portfolio CSV exports in `data/live/`, named `YYYYMMDD…csv` (existing convention). Need ≥ 2.
-2. HL transaction history export for the same account (contributions, withdrawals, dealing). Format unverified.
-3. Benchmark total-return series from an approved API (e.g. Alpha Vantage `TIME_SERIES_MONTHLY_ADJUSTED` on an ETF proxy such as SWDA / CSPX). 2–3 tickers fits the 25-call free tier.
-
-Until all three exist, show no return comparison. Do not approximate from cost basis.
+No return, XIRR, TWR or other history-based measure. It needs saved exports and transaction history, which Data Handling rules out. Do not approximate return from cost basis.
 
 ## Project Integrity
 
