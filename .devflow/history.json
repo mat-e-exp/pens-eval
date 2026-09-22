@@ -1,0 +1,98 @@
+[
+  {
+    "timestamp": "2026-09-22T12:22:06.025Z",
+    "trigger": "pre-commit",
+    "summary": {
+      "total": 10,
+      "passed": 9,
+      "failed": 0,
+      "warnings": 0,
+      "skipped": 1,
+      "overridden": 0
+    },
+    "findings": [],
+    "passed": [
+      "trivy-secrets:trivy-secrets",
+      "lint:lint-python",
+      "format:format-python",
+      "format:format-javascript",
+      "lint:lint-python-hooks",
+      "format:format-python-hooks",
+      "suppression:suppression-gate",
+      "dangerous-config:dangerous-config",
+      "lockfile:lockfile-gate"
+    ]
+  },
+  {
+    "timestamp": "2026-09-22T12:22:14.112Z",
+    "trigger": "pre-commit",
+    "summary": {
+      "total": 10,
+      "passed": 9,
+      "failed": 0,
+      "warnings": 0,
+      "skipped": 1,
+      "overridden": 0
+    },
+    "findings": [],
+    "passed": [
+      "trivy-secrets:trivy-secrets",
+      "lint:lint-python",
+      "format:format-python",
+      "format:format-javascript",
+      "lint:lint-python-hooks",
+      "format:format-python-hooks",
+      "suppression:suppression-gate",
+      "dangerous-config:dangerous-config",
+      "lockfile:lockfile-gate"
+    ]
+  },
+  {
+    "timestamp": "2026-09-22T12:25:15.922Z",
+    "trigger": "pre-commit",
+    "summary": {
+      "total": 10,
+      "passed": 9,
+      "failed": 0,
+      "warnings": 0,
+      "skipped": 1,
+      "overridden": 0
+    },
+    "findings": [],
+    "passed": [
+      "trivy-secrets:trivy-secrets",
+      "lint:lint-python",
+      "format:format-python",
+      "format:format-javascript",
+      "lint:lint-python-hooks",
+      "format:format-python-hooks",
+      "suppression:suppression-gate",
+      "dangerous-config:dangerous-config",
+      "lockfile:lockfile-gate"
+    ]
+  },
+  {
+    "timestamp": "2026-09-22T12:25:24.586Z",
+    "trigger": "pre-commit",
+    "summary": {
+      "total": 10,
+      "passed": 9,
+      "failed": 0,
+      "warnings": 0,
+      "skipped": 1,
+      "overridden": 0
+    },
+    "findings": [],
+    "passed": [
+      "trivy-secrets:trivy-secrets",
+      "lint:lint-python",
+      "format:format-python",
+      "format:format-javascript",
+      "lint:lint-python-hooks",
+      "format:format-python-hooks",
+      "suppression:suppression-gate",
+      "dangerous-config:dangerous-config",
+      "lockfile:lockfile-gate"
+    ]
+  }
+]

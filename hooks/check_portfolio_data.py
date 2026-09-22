@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Block commits that would put real-portfolio data into git (CLAUDE.md -> Data Handling).
 
-Checks, on staged changes (pre-commit) or the commit message (commit-msg):
+Runs from the commit-msg hook: once on the staged changes, once on the message
+(--message). commit-msg, not pre-commit, because devflow rewrites pre-commit.
+Checks:
   1. No staged file under data/ except the allowlist below.
   2. No HL account-summary header lines outside data/test/: "Client Name:" or
      "Client Number:" with any value, or a figure line ("Total cash:", ...).
@@ -9,7 +11,7 @@ Checks, on staged changes (pre-commit) or the commit message (commit-msg):
 Matched values are never printed, so the check itself does not echo real data.
   3. No figure or holding line from any real export found locally in data/live/.
 
-Install once per clone:  git config core.hooksPath hooks
+Install once per clone:  sh hooks/install.sh  (writes .git/hooks/commit-msg, then runs devflow install)
 """
 import glob
 import re

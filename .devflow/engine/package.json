@@ -1,0 +1,7 @@
+{
+  "name": "@mat-e-exp/devflow-engine",
+  "version": "1.0.0",
+  "private": true,
+  "description": "devflow engine vendored by devflow init/update. Do not edit.",
+  "main": "cli/index.js"
+}

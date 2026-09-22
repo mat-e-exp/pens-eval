@@ -64,7 +64,7 @@ Alpha Vantage calls run from the browser. Without a key the app uses the holding
 
 ## Data handling
 
-The page is a snapshot of one uploaded export; nothing from it is kept. Rules in `CLAUDE.md` → Data Handling. Git hooks in `hooks/` block real-portfolio data from commits; install once per clone with `git config core.hooksPath hooks`.
+The page is a snapshot of one uploaded export; nothing from it is kept. Rules in `CLAUDE.md` → Data Handling. `hooks/check_portfolio_data.py` blocks real-portfolio data from commits, alongside devflow's checks (`.devflow/`). Install both once per clone with `sh hooks/install.sh`.
 
 ## Out of scope
 

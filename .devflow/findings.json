@@ -1,0 +1,194 @@
+{
+  "timestamp": "2026-09-22T12:25:24.581Z",
+  "repoRoot": "/Users/mat.edwards/dev/test-claude/pens-eval",
+  "summary": {
+    "total": 10,
+    "passed": 9,
+    "failed": 0,
+    "warnings": 0,
+    "skipped": 1,
+    "overridden": 0
+  },
+  "findings": [
+    {
+      "id": "trivy-secrets-1790079917477",
+      "tool": "trivy-secrets",
+      "hookId": "trivy-secrets",
+      "severity": "high",
+      "status": "passed",
+      "failPolicy": "closed",
+      "file": null,
+      "line": null,
+      "description": "Secrets detected in repository",
+      "fixSteps": [
+        "Add the file to .gitignore",
+        "Remove from git tracking: git rm --cached <file>",
+        "Use Infisical for secrets management: https://infisical.com/docs",
+        "If this is a dev-only file (e.g. self-signed cert), document why and override"
+      ],
+      "docsUrl": "https://trivy.dev/docs/scanner/secret/",
+      "rawOutput": "Report Summary\n\n┌────────┬──────┬─────────┐\n│ Target │ Type │ Secrets │\n├────────┼──────┼─────────┤\n│   -    │  -   │    -    │\n└────────┴──────┴─────────┘\nLegend:\n- '-': Not scanned\n- '0': Clean (no security findings detected)",
+      "override": null
+    },
+    {
+      "id": "lint-python-1790079917497",
+      "tool": "lint",
+      "hookId": "lint-python",
+      "severity": "medium",
+      "status": "passed",
+      "failPolicy": "open",
+      "file": null,
+      "line": null,
+      "description": "Lint issues found",
+      "fixSteps": [
+        "Run: devflow fix --tool <linter> to auto-fix where possible",
+        "Review remaining issues manually"
+      ],
+      "rawOutput": "No matching staged files",
+      "override": null
+    },
+    {
+      "id": "format-python-1790079917853",
+      "tool": "format",
+      "hookId": "format-python",
+      "severity": "medium",
+      "status": "passed",
+      "failPolicy": "open",
+      "file": null,
+      "line": null,
+      "description": "Formatting issues found",
+      "fixSteps": [
+        "Run: devflow fix to auto-format all files"
+      ],
+      "rawOutput": "No matching staged files",
+      "override": null
+    },
+    {
+      "id": "lint-javascript-1790079918460",
+      "tool": "lint",
+      "hookId": "lint-javascript",
+      "severity": "medium",
+      "status": "skipped",
+      "failPolicy": "open",
+      "file": null,
+      "line": null,
+      "description": "Lint issues found",
+      "fixSteps": [
+        "Run: devflow fix --tool <linter> to auto-fix where possible",
+        "Review remaining issues manually"
+      ],
+      "rawOutput": "Oops! Something went wrong! :(\n\nESLint: 10.2.0\n\nESLint couldn't find an eslint.config.(js|mjs|cjs) file.\n\nFrom ESLint v9.0.0, the default configuration file is now eslint.config.js.\nIf you are using a .eslintrc.* file, please follow the migration guide\nto update your configuration file to the new format:\n\nhttps://eslint.org/docs/latest/use/configure/migration-guide\n\nIf you still have problems after following the migration guide, please stop by\nhttps://eslint.org/chat/help to chat with the team.",
+      "override": null
+    },
+    {
+      "id": "format-javascript-1790079918852",
+      "tool": "format",
+      "hookId": "format-javascript",
+      "severity": "medium",
+      "status": "passed",
+      "failPolicy": "open",
+      "file": null,
+      "line": null,
+      "description": "Formatting issues found",
+      "fixSteps": [
+        "Run: devflow fix to auto-format all files"
+      ],
+      "rawOutput": "Checking formatting...\nAll matched files use Prettier code style!",
+      "override": null
+    },
+    {
+      "id": "lint-python-hooks-1790079918853",
+      "tool": "lint",
+      "hookId": "lint-python-hooks",
+      "severity": "medium",
+      "status": "passed",
+      "failPolicy": "open",
+      "file": null,
+      "line": null,
+      "description": "Lint issues found",
+      "fixSteps": [
+        "Run: devflow fix --tool <linter> to auto-fix where possible",
+        "Review remaining issues manually"
+      ],
+      "rawOutput": "No matching staged files",
+      "override": null
+    },
+    {
+      "id": "format-python-hooks-1790079918853",
+      "tool": "format",
+      "hookId": "format-python-hooks",
+      "severity": "medium",
+      "status": "passed",
+      "failPolicy": "open",
+      "file": null,
+      "line": null,
+      "description": "Formatting issues found",
+      "fixSteps": [
+        "Run: devflow fix to auto-format all files"
+      ],
+      "rawOutput": "No matching staged files",
+      "override": null
+    },
+    {
+      "id": "suppression-gate-1790079918878",
+      "tool": "suppression",
+      "hookId": "suppression-gate",
+      "severity": "high",
+      "status": "passed",
+      "failPolicy": "closed",
+      "file": null,
+      "line": null,
+      "description": "New suppression comment(s) in staged changes",
+      "fixSteps": [
+        "Fix the underlying finding instead of silencing the tool",
+        "If the rule is wrong for this codebase, change it in the tool config (e.g. .eslintrc, ruff.toml) with a comment saying why — that is reviewable, an inline suppression is not",
+        "If a suppression is unavoidable: devflow override --rule suppression-gate --reason \"...\" (30-day expiry, logged with your identity)",
+        "To permanently allow a pattern (e.g. test-skip): add its id to suppressionAllow in .devflow/config.yml"
+      ],
+      "docsUrl": null,
+      "rawOutput": "1 file(s) scanned, no new suppressions",
+      "override": null
+    },
+    {
+      "id": "dangerous-config-1790079924580",
+      "tool": "dangerous-config",
+      "hookId": "dangerous-config",
+      "severity": "high",
+      "status": "passed",
+      "failPolicy": "closed",
+      "file": null,
+      "line": null,
+      "description": "Dangerous configuration detected",
+      "fixSteps": [
+        "Read the rule message printed above — it names the security property the setting gives up",
+        "Restore the safe setting: verify TLS certificates, keep debug off, enumerate CORS origins, pass command arguments as an array rather than a shell string",
+        "If a value differs per environment, read it from an environment variable rather than hardcoding the unsafe one",
+        "If the finding is wrong for this repo: devflow override --rule dangerous-config --reason \"...\" (30-day expiry, logged with your identity)",
+        "To exclude a path permanently: add it to dangerousConfigIgnorePaths in .devflow/config.yml"
+      ],
+      "docsUrl": null,
+      "rawOutput": "{\"version\":\"1.136.0\",\"results\":[],\"errors\":[],\"paths\":{\"scanned\":[\"zz.js\"]},\"time\":{\"rules\":[],\"rules_parse_time\":0.019896984100341797,\"profiling_times\":{\"config_time\":0.7629499435424805,\"core_time\":0.7600507736206055,\"ignores_time\":0.0001800060272216797,\"total_time\":1.5240659713745117},\"parsing_time\":{\"total_time\":0.0,\"per_file_time\":{\"mean\":0.0,\"std_dev\":0.0},\"very_slow_stats\":{\"time_ratio\":0.0,\"count_ratio\":0.0},\"very_slow_files\":[]},\"scanning_time\":{\"total_time\":0.003133058547973633,\"per_file_time\":{\"mean\":0.0015665292739868164,\"std_dev\":9.525423649847653e-08},\"very_slow_stats\":{\"time_ratio\":0.0,\"count_ratio\":0.0},\"very_slow_files\":[]},\"matching_time\":{\"total_time\":0.0,\"per_file_and_rule_time\":{\"mean\":0.0,\"std_dev\":0.0},\"very_slow_stats\":{\"time_ratio\":0.0,\"count_ratio\":0.0},\"very_slow_rules_on_files\":[]},\"tainting_time\":{\"total_time\":0.0,\"per_def_and_rule_time\":{\"mean\":0.0,\"std_dev\":0.0},\"very_slow_stats\":{\"time_ratio\":0.0,\"count_ratio\":0.0},\"very_slow_rules_on_defs\":[]},\"fixpoint_timeouts\":[],\"prefiltering\":{\"project_level_time\":0.0,\"file_level_time\":0.0,\"rules_with_project_prefilters_ratio\":0.0,\"rules_with_file_prefilters_ratio\":1.0,\"rules_selected_ratio\":0.0,\"rules_matched_ratio\":0.0},\"targets\":[],\"total_bytes\":0,\"max_memory_bytes\":87522240},\"engine_requested\":\"OSS\",\"skipped_rules\":[]}",
+      "override": null
+    },
+    {
+      "id": "lockfile-gate-1790079924581",
+      "tool": "lockfile",
+      "hookId": "lockfile-gate",
+      "severity": "high",
+      "status": "passed",
+      "failPolicy": "closed",
+      "file": null,
+      "line": null,
+      "description": "Dependency change without its lockfile",
+      "fixSteps": [
+        "Run the install command for the ecosystem so the lockfile is regenerated, then stage it alongside the manifest",
+        "Commit the manifest and the lockfile together — reviewers need the resolved versions, and CI installs from the lockfile, not the manifest",
+        "If the project has no lockfile at all, generate one now: an unlocked project installs different versions on every machine and every build",
+        "If this change genuinely does not affect resolution: devflow override --rule lockfile-gate --reason \"...\" (30-day expiry, logged with your identity)"
+      ],
+      "docsUrl": null,
+      "rawOutput": "no manifests in scope",
+      "override": null
+    }
+  ]
+}

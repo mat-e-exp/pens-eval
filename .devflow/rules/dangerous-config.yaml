@@ -1,0 +1,307 @@
+# devflow — dangerous configuration rules (Semgrep)
+#
+# Deterministic footguns that AI-assisted and junior code produces to "make it
+# work": TLS verification off, debug on, wildcard CORS with credentials, shell
+# injection, secrets printed to logs, hooks bypassed in scripts, CI workflows
+# that hand write access to untrusted input. Every rule here is ERROR and the
+# hook fails closed. Bypass: devflow override --rule dangerous-config --reason "..."
+#
+# Copied into .devflow/rules/ by devflow init/update/check. Do not edit the copy.
+# Format: https://semgrep.dev/docs/writing-rules/rule-syntax/
+
+rules:
+  # ---------------------------------------------------------------- Python
+  - id: devflow.py.flask-debug-true
+    languages: [python]
+    severity: ERROR
+    message: Flask debug mode exposes an interactive debugger (remote code execution). Set debug from an environment variable and keep it off outside local dev.
+    metadata: { category: dangerous-config, subcategory: debug }
+    patterns:
+      - pattern: $APP.run(..., debug=True, ...)
+
+  - id: devflow.py.django-debug-true
+    languages: [python]
+    severity: ERROR
+    message: DEBUG = True in Django settings leaks stack traces, settings and SQL to any visitor. Read it from the environment, default False.
+    metadata: { category: dangerous-config, subcategory: debug }
+    paths:
+      include: ["**/settings.py", "**/settings/*.py", "**/*settings*.py"]
+    pattern: DEBUG = True
+
+  - id: devflow.py.django-allowed-hosts-wildcard
+    languages: [python]
+    severity: ERROR
+    message: ALLOWED_HOSTS wildcard disables Host-header validation (cache poisoning, password-reset hijack). List the real hostnames.
+    metadata: { category: dangerous-config, subcategory: network }
+    pattern-either:
+      - pattern: ALLOWED_HOSTS = ["*"]
+      - pattern: ALLOWED_HOSTS = ['*']
+
+  - id: devflow.py.tls-verify-disabled
+    languages: [python]
+    severity: ERROR
+    message: TLS certificate verification is disabled. Any network hop can read or alter this traffic. Fix the certificate chain instead (certifi, REQUESTS_CA_BUNDLE).
+    metadata: { category: dangerous-config, subcategory: tls }
+    pattern-either:
+      - pattern: requests.$METHOD(..., verify=False, ...)
+      - pattern: $SESSION.verify = False
+      - pattern: httpx.$METHOD(..., verify=False, ...)
+      - pattern: httpx.Client(..., verify=False, ...)
+      - pattern: httpx.AsyncClient(..., verify=False, ...)
+      - pattern: aiohttp.TCPConnector(..., ssl=False, ...)
+      - pattern: ssl._create_unverified_context()
+      - pattern: $CTX.check_hostname = False
+      - pattern: $CTX.verify_mode = ssl.CERT_NONE
+
+  - id: devflow.py.cors-wildcard-with-credentials
+    languages: [python]
+    severity: ERROR
+    message: Wildcard CORS origin combined with credentials lets any site make authenticated requests as the user. Enumerate allowed origins.
+    metadata: { category: dangerous-config, subcategory: cors }
+    pattern-either:
+      - pattern: $APP.add_middleware(CORSMiddleware, ..., allow_origins=["*"], ..., allow_credentials=True, ...)
+      - pattern: $APP.add_middleware(CORSMiddleware, ..., allow_credentials=True, ..., allow_origins=["*"], ...)
+      - pattern: CORS($APP, ..., origins="*", ..., supports_credentials=True, ...)
+      - pattern: CORS($APP, ..., supports_credentials=True, ..., origins="*", ...)
+
+  - id: devflow.py.subprocess-shell-true-nonliteral
+    languages: [python]
+    severity: ERROR
+    message: shell=True with a non-literal command is shell injection. Pass an argument list and drop shell=True.
+    metadata: { category: dangerous-config, subcategory: injection }
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.$FUNC($CMD, ..., shell=True, ...)
+          - pattern: os.system($CMD)
+      - pattern-not: subprocess.$FUNC("...", ..., shell=True, ...)
+      - pattern-not: os.system("...")
+
+  - id: devflow.py.yaml-load-unsafe
+    languages: [python]
+    severity: ERROR
+    message: yaml.load without a safe Loader executes arbitrary Python from the document. Use yaml.safe_load.
+    metadata: { category: dangerous-config, subcategory: deserialisation }
+    patterns:
+      - pattern: yaml.load($DOC)
+      - pattern-not: yaml.load($DOC, Loader=...)
+
+  - id: devflow.py.hardcoded-secret-key
+    languages: [python]
+    severity: ERROR
+    message: Framework SECRET_KEY is a string literal in source. Rotate it and read it from the environment; the committed value is already compromised.
+    metadata: { category: dangerous-config, subcategory: secrets }
+    patterns:
+      - pattern-either:
+          - pattern: SECRET_KEY = "$VALUE"
+          - pattern: $APP.secret_key = "$VALUE"
+          - pattern: $APP.config["SECRET_KEY"] = "$VALUE"
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: ^.{8,}$
+
+  - id: devflow.py.print-environ
+    languages: [python]
+    severity: ERROR
+    message: Dumping os.environ writes every secret in the process to logs.
+    metadata: { category: dangerous-config, subcategory: secrets }
+    pattern-either:
+      - pattern: print(os.environ)
+      - pattern: print(dict(os.environ))
+      - pattern: $LOG.$LEVEL(os.environ)
+      - pattern: $LOG.$LEVEL(dict(os.environ))
+
+  # ------------------------------------------------------- JavaScript / TS
+  - id: devflow.js.tls-reject-unauthorized-false
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: TLS certificate verification is disabled for this process or request. Fix the certificate (NODE_EXTRA_CA_CERTS) instead.
+    metadata: { category: dangerous-config, subcategory: tls }
+    pattern-either:
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
+      - pattern: |
+          { ..., rejectUnauthorized: false, ... }
+
+  - id: devflow.js.cors-wildcard-origin
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: CORS origin "*" allows any site to call this API from a browser. Enumerate allowed origins; never combine a wildcard with credentials.
+    metadata: { category: dangerous-config, subcategory: cors }
+    pattern-either:
+      - pattern: |
+          { ..., origin: "*", ... }
+      - pattern: |
+          { ..., origin: '*', ... }
+      - pattern: $RES.setHeader("Access-Control-Allow-Origin", "*")
+      - pattern: $RES.header("Access-Control-Allow-Origin", "*")
+      - pattern: $RES.set("Access-Control-Allow-Origin", "*")
+
+  - id: devflow.js.error-stack-to-client
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Stack trace returned in the HTTP response reveals file paths, dependencies and logic to the caller. Log it server-side; send a generic message.
+    metadata: { category: dangerous-config, subcategory: information-leak }
+    pattern-either:
+      - pattern: $RES. ... .send($ERR.stack)
+      - pattern: |
+          $RES. ... .json({ ..., $KEY: $ERR.stack, ... })
+      - pattern: |
+          $RES. ... .send({ ..., $KEY: $ERR.stack, ... })
+      - pattern: $RES. ... .end($ERR.stack)
+
+  - id: devflow.js.child-process-interpolated
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Shell command built from a template literal or concatenation is command injection. Use execFile/spawn with an argument array.
+    metadata: { category: dangerous-config, subcategory: injection }
+    pattern-either:
+      - pattern: exec(`...${...}...`, ...)
+      - pattern: execSync(`...${...}...`, ...)
+      - pattern: exec($A + $B, ...)
+      - pattern: execSync($A + $B, ...)
+      - pattern: child_process.exec(`...${...}...`, ...)
+      - pattern: child_process.execSync(`...${...}...`, ...)
+
+  - id: devflow.js.jwt-algorithm-none
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Accepting the "none" JWT algorithm lets anyone forge tokens. Pin to one asymmetric or HMAC algorithm.
+    metadata: { category: dangerous-config, subcategory: auth }
+    pattern-either:
+      - pattern: |
+          { ..., algorithms: [..., "none", ...], ... }
+      - pattern: |
+          { ..., algorithm: "none", ... }
+
+  - id: devflow.js.eval-nonliteral
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: eval / new Function on non-literal input executes arbitrary code. Use JSON.parse or a real parser.
+    metadata: { category: dangerous-config, subcategory: injection }
+    patterns:
+      - pattern-either:
+          - pattern: eval($CODE)
+          - pattern: new Function(..., $CODE)
+      - pattern-not: eval("...")
+      - pattern-not: new Function(..., "...")
+
+  - id: devflow.js.log-process-env
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Logging process.env writes every secret in the process to logs.
+    metadata: { category: dangerous-config, subcategory: secrets }
+    pattern-either:
+      - pattern: console.$LEVEL(..., process.env, ...)
+      - pattern: console.$LEVEL(..., JSON.stringify(process.env), ...)
+
+  # -------------------------------------------------------------------- Go
+  - id: devflow.go.tls-insecure-skip-verify
+    languages: [go]
+    severity: ERROR
+    message: InsecureSkipVerify disables TLS certificate verification. Load the CA into the RootCAs pool instead.
+    metadata: { category: dangerous-config, subcategory: tls }
+    pattern: |
+      tls.Config{..., InsecureSkipVerify: true, ...}
+
+  - id: devflow.go.exec-shell-nonliteral
+    languages: [go]
+    severity: ERROR
+    message: Running a shell with a non-literal command string is command injection. Call the binary directly with exec.Command(name, args...).
+    metadata: { category: dangerous-config, subcategory: injection }
+    patterns:
+      - pattern-either:
+          - pattern: exec.Command("sh", "-c", $CMD)
+          - pattern: exec.Command("bash", "-c", $CMD)
+          - pattern: exec.Command("/bin/sh", "-c", $CMD)
+          - pattern: exec.Command("/bin/bash", "-c", $CMD)
+      - pattern-not: exec.Command("...", "-c", "...")
+
+  # ------------------------------------------------------------------ Ruby
+  - id: devflow.rb.ssl-verify-none
+    languages: [ruby]
+    severity: ERROR
+    message: OpenSSL VERIFY_NONE disables TLS certificate verification.
+    metadata: { category: dangerous-config, subcategory: tls }
+    pattern: OpenSSL::SSL::VERIFY_NONE
+
+  - id: devflow.rb.system-interpolated
+    languages: [ruby]
+    severity: ERROR
+    message: Shell command built by string interpolation is command injection. Pass arguments separately - system("cmd", arg1, arg2).
+    metadata: { category: dangerous-config, subcategory: injection }
+    pattern-either:
+      - pattern: system("...#{...}...")
+      - pattern: exec("...#{...}...")
+      - pattern: '`...#{...}...`'
+      - pattern: IO.popen("...#{...}...")
+
+  # ------------------------------------------------------- GitHub Actions
+  - id: devflow.gha.pull-request-target-checks-out-head
+    languages: [yaml]
+    severity: ERROR
+    message: pull_request_target runs with write token and secrets; checking out the PR head executes untrusted code with them. Use pull_request, or never check out head.ref/head.sha under pull_request_target.
+    metadata: { category: dangerous-config, subcategory: ci }
+    paths:
+      include: [".github/workflows/*.yml", ".github/workflows/*.yaml"]
+    patterns:
+      - pattern-regex: (?s)pull_request_target.*github\.event\.pull_request\.head\.(ref|sha)
+
+  - id: devflow.gha.permissions-write-all
+    languages: [yaml]
+    severity: ERROR
+    message: permissions write-all grants the job every repository scope. Declare the minimum (usually contents read).
+    metadata: { category: dangerous-config, subcategory: ci }
+    paths:
+      include: [".github/workflows/*.yml", ".github/workflows/*.yaml"]
+    pattern-regex: permissions:\s*write-all
+
+  - id: devflow.gha.script-injection-from-event
+    languages: [yaml]
+    severity: ERROR
+    message: Untrusted event text interpolated directly into a run step is script injection. Pass it through an env var and quote it.
+    metadata: { category: dangerous-config, subcategory: ci }
+    paths:
+      include: [".github/workflows/*.yml", ".github/workflows/*.yaml"]
+    pattern-regex: run:[^\n]*\$\{\{\s*github\.event\.(issue|pull_request|comment|review|review_comment|discussion|head_commit|commits)[^}]*\.(title|body|message|ref|label\.name|head\.ref|default_branch)
+
+  # --------------------------------------------- Shell / scripts / generic
+  - id: devflow.sh.git-no-verify
+    languages: [generic]
+    severity: ERROR
+    message: --no-verify bypasses the pre-commit and pre-push hooks that gate this repository. Remove it; use devflow override for a documented exception.
+    metadata: { category: dangerous-config, subcategory: bypass }
+    paths:
+      include: ["*.sh", "*.bash", "*.zsh", "Makefile", "*.mk", "*.yml", "*.yaml", "package.json", "*.js", "*.ts", "*.py", "*.rb", "*.go", "Justfile", "*.toml"]
+      exclude: ["**/node_modules/**", ".devflow/rules/**"]
+    pattern-regex: git\s+(commit|push)[^\n]*--no-verify
+
+  - id: devflow.sh.curl-pipe-shell
+    languages: [generic]
+    severity: ERROR
+    message: Piping a download straight into a shell executes whatever the server (or anyone in the path) returns. Download, verify a checksum, then run.
+    metadata: { category: dangerous-config, subcategory: supply-chain }
+    paths:
+      include: ["*.sh", "*.bash", "*.zsh", "Dockerfile", "Dockerfile.*", "*.dockerfile", "Makefile", "*.yml", "*.yaml", "Justfile"]
+      exclude: ["**/node_modules/**"]
+    pattern-regex: (curl|wget)[^\n|]*\|\s*(sudo\s+)?(ba|z)?sh\b
+
+  - id: devflow.sh.curl-insecure
+    languages: [generic]
+    severity: ERROR
+    message: curl --insecure / -k disables TLS verification for the download.
+    metadata: { category: dangerous-config, subcategory: tls }
+    paths:
+      include: ["*.sh", "*.bash", "*.zsh", "Dockerfile", "Dockerfile.*", "Makefile", "*.yml", "*.yaml", "*.py", "*.js", "*.ts", "*.rb", "*.go"]
+      exclude: ["**/node_modules/**"]
+    pattern-regex: curl\s[^\n]*(\s-k(\s|$)|--insecure)
+
+  - id: devflow.sh.chmod-777
+    languages: [generic]
+    severity: ERROR
+    message: chmod 777 makes the path writable by every user on the host. Set the narrowest mode that works.
+    metadata: { category: dangerous-config, subcategory: permissions }
+    paths:
+      include: ["*.sh", "*.bash", "*.zsh", "Dockerfile", "Dockerfile.*", "Makefile", "*.yml", "*.yaml", "*.py", "*.js", "*.ts", "*.rb", "*.go"]
+      exclude: ["**/node_modules/**"]
+    pattern-regex: chmod\s+(-[a-zA-Z]+\s+)?(0?777|a\+rwx)\b
