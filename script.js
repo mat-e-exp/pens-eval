@@ -1113,7 +1113,8 @@ function readRules() {
         maxPosition: num('ruleMaxPosition', 5),   // % of invested value
         minPosition: num('ruleMinPosition', 1.5), // % of invested value
         sectorBand: num('ruleSectorBand', 5),     // +/- points vs benchmark
-        cashTarget: num('ruleCashTarget', 2)      // % of total account
+        cashTarget: num('ruleCashTarget', 2),     // % of total account
+        minTrade: num('ruleMinTrade', 1)          // % of total account; smaller trades are skipped
     };
 }
 
@@ -1440,6 +1441,11 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
     }
     if (totalCash === null) reserveNote += ' No "Total cash" line in this file; cash treated as £0.';
 
+
+    // Minimum trade: below this a deal is not worth its dealing charge.
+    const minTrade = accountTotal * rules.minTrade / 100;
+    const tradeNote = ` Trades under ${gbp(minTrade)} (${pct(rules.minTrade)} of the account, min trade rule) are not proposed.`;
+
     // Working copy of the portfolio
     const work = holdings.map(h => ({ name: h.name, sector: h.sector, value: h.value }));
     let pool = Math.max(0, cash - reserve);
@@ -1450,6 +1456,7 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
     work.forEach(h => {
         if (h.value > capValue) {
             const amount = h.value - capValue;
+            if (amount < minTrade) return;   // over the cap but not by enough to deal
             actions.push({ kind: 'Trim', name: h.name, amount,
                 why: `${pct(h.value / invested * 100)} exceeds the ${pct(rules.maxPosition)} single-position cap. Proceeds join the cash to deploy. No capital gains tax in a SIPP.` });
             h.value = capValue; pool += amount;
@@ -1498,9 +1505,9 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
                 const smallHere = work.filter(h => h.sector === g.name && !h.name.startsWith('New: ') && h.value < minValue)
                     .sort((a, b) => b.value - a.value);
                 for (const h of smallHere) {
-                    if (remaining < 1) break;
+                    if (remaining < minTrade) break;
                     const amount = Math.min(remaining, minValue - h.value, headroom(h.value));
-                    if (amount < 1) continue;
+                    if (amount < minTrade) continue;
                     actions.push({ kind: 'Buy', name: `${g.name} → ${h.name}`, amount,
                         why: `Sector ${gapPts} pts under ${bench.name}. Under the ${pct(rules.minPosition)} minimum, so topped up to it before larger holdings or a new position.` });
                     h.value += amount; remaining -= amount; unallocated -= amount; toppedUp.add(h.name);
@@ -1509,9 +1516,9 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
                 const existing = work.filter(h => h.sector === g.name && !h.name.startsWith('New: ') && h.value >= minValue)
                     .sort((a, b) => b.value - a.value);
                 for (const h of existing) {
-                    if (remaining < 1) break;
+                    if (remaining < minTrade) break;
                     const amount = Math.min(remaining, headroom(h.value));
-                    if (amount < 1) continue;
+                    if (amount < minTrade) continue;
                     // A holding already topped up to the minimum above: one deal, one row.
                     const prior = toppedUp.has(h.name) && actions.find(a => a.kind === 'Buy' && a.name === `${g.name} → ${h.name}`);
                     if (prior) {
@@ -1524,9 +1531,9 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
                     h.value += amount; remaining -= amount; unallocated -= amount;
                 }
                 let n = 1;
-                while (remaining >= minValue) {   // a new position below the minimum is not opened; remainder stays as cash
+                while (remaining >= Math.max(minValue, minTrade)) {   // a new position below the minimum is not opened; remainder stays as cash
                     const amount = Math.min(remaining, headroom(0));
-                    if (amount < minValue) break;
+                    if (amount < Math.max(minValue, minTrade)) break;
                     const label = `New: ${g.name}${n > 1 ? ' #' + n : ''}`;
                     actions.push({ kind: 'Buy', name: `${g.name} → new position${n > 1 ? ' #' + n : ''}`, amount,
                         why: existing.length
@@ -1539,7 +1546,7 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
         }
     }
     if (unallocated > 1) actions.push({ kind: 'Keep as cash', name: 'Unallocated', amount: unallocated,
-        why: bench ? `Left after closing every sector gap more than ${rules.sectorBand} pts under the index. Above the reserve; deploy at your discretion or raise the reserve.`
+        why: bench ? `Left after closing every sector gap more than ${rules.sectorBand} pts under the index, and after dropping trades under ${gbp(minTrade)}. Above the reserve; deploy at your discretion or raise the reserve.`
                    : 'Benchmark data unavailable, so no sector allocation was made.' });
 
     // Dealing: one online share deal per Trim or Buy row, at the standard rate
@@ -1569,7 +1576,7 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
     const accountAfter = afterStats.invested + cashAfterClean;
     const overCap = stats => stats.weights.filter(h => h.weight > rules.maxPosition + 1e-9).length;
     return {
-        reserve, reserveNote, actions, dealing,
+        reserve, reserveNote: reserveNote + tradeNote, actions, dealing,
         before: { cash, cashPct: accountTotal ? cash / accountTotal * 100 : 0, invested: beforeStats.invested, largest: beforeStats.largest, top10: beforeStats.top10,
                   effectiveN: beforeStats.effectiveN, overCap: overCap(beforeStats), sectorsOut: beforeStats.sectorsOut, maxGap: beforeStats.maxGap },
         after:  { cash: cashAfterClean, cashPct: accountAfter ? cashAfterClean / accountAfter * 100 : 0, invested: afterStats.invested, largest: afterStats.largest, top10: afterStats.top10,
@@ -2137,7 +2144,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             createPortfolioReview();
         }
     });
-    ['ruleMaxPosition', 'ruleMinPosition', 'ruleSectorBand', 'ruleCashTarget'].forEach(id => {
+    ['ruleMaxPosition', 'ruleMinPosition', 'ruleSectorBand', 'ruleCashTarget', 'ruleMinTrade'].forEach(id => {
         document.getElementById(id).addEventListener('input', () => {
             if (portfolioData.length > 0) createPortfolioReview();
         });
