@@ -1395,6 +1395,15 @@ details.holdings-section[open] .summary-hint {
     white-space: nowrap;
 }
 
+.small-choice {
+    background: rgba(255, 255, 255, 0.05);
+    color: #e8e8e8;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 3px 6px;
+    font-size: 0.85em;
+}
+
 .bench-table td.reason {
     white-space: normal;
     color: #b8b8b8;
