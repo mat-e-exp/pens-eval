@@ -1111,10 +1111,9 @@ function readRules() {
     };
     return {
         maxPosition: num('ruleMaxPosition', 5),   // % of invested value
-        minPosition: num('ruleMinPosition', 1.5), // % of invested value
+        minPosition: num('ruleMinPosition', 1),   // % of total account: smallest holding worth owning and smallest trade worth dealing
         sectorBand: num('ruleSectorBand', 5),     // +/- points vs benchmark
-        cashTarget: num('ruleCashTarget', 2),     // % of total account
-        minTrade: num('ruleMinTrade', 1)          // % of total account; smaller trades are skipped
+        cashTarget: num('ruleCashTarget', 2)      // % of total account
     };
 }
 
@@ -1133,10 +1132,11 @@ function setSmallPositionChoice(name, value) {
     createPortfolioReview();
 }
 
-function smallPositionStances(holdings, rules, bench) {
+function smallPositionStances(holdings, rules, bench, accountTotal) {
+    const minValue = accountTotal * rules.minPosition / 100;
     const sectorWeight = {};
     holdings.forEach(h => { sectorWeight[h.sector] = (sectorWeight[h.sector] || 0) + h.weight; });
-    return holdings.filter(h => h.weight < rules.minPosition).map(h => {
+    return holdings.filter(h => h.value < minValue).map(h => {
         if (!bench) return { ...h, gap: null, stance: '—', choice: smallPositionChoice.get(h.name) || null };
         const gap = sectorWeight[h.sector] - (bench.sectors[h.sector] || 0);
         const stance = gap < -rules.sectorBand ? 'Top up' : gap >= 0 ? 'Exit' : 'Either';
@@ -1177,7 +1177,7 @@ function createPortfolioReview() {
         text: `Largest position ${pct(port.largest)}, top 10 ${pct(port.top10)}, ${port.count} holdings but ${port.effectiveN.toFixed(0)} effective (1/HHI). ` +
               (over.length ? `${over.length} above the ${pct(rules.maxPosition)} cap: ${over.map(h => h.name).join(', ')}.` : `None above the ${pct(rules.maxPosition)} cap.`)
     });
-    const small = smallPositionStances(holdings, rules, bench).sort((a, b) => a.weight - b.weight);
+    const small = smallPositionStances(holdings, rules, bench, accountTotal).sort((a, b) => a.weight - b.weight);
     const smallWeight = small.reduce((sum, h) => sum + h.weight, 0);
     const spec = small.filter(h => h.choice === 'spec');
     const open = small.filter(h => !h.choice);   // not yet answered
@@ -1190,12 +1190,12 @@ function createPortfolioReview() {
             ? (small.length - spec.length - open.length ? `${small.length - spec.length - open.length} answered (top up or exit) and in the plan. ` : '') +
               (spec.length ? `${spec.length} marked speculative, ${pct(spec.reduce((sum, h) => sum + h.weight, 0))} of invested value: left alone, deliberately small. ` : '') +
               (open.length === 0 ? 'Every other small position has been answered.' :
-              `${open.length} holding${open.length === 1 ? '' : 's'} under ${pct(rules.minPosition)} each, ${pct(openWeight)} of invested value combined, not yet answered. ` +
+              `${open.length} holding${open.length === 1 ? '' : 's'} under the ${pct(rules.minPosition)} minimum, ${pct(openWeight)} of invested value combined, not yet answered. ` +
               `Each is too small to move the result alone; together they are not. ` +
               (bench ? `Against ${bench.name}: ${count('Top up')} in sectors more than ${rules.sectorBand} pts under the index (top-up candidates; the plan fills these first when there is cash to deploy), ` +
                        `${count('Exit')} in sectors at or over the index (exit candidates), ${count('Either')} in between. ` : '') +
               (charges ? `Exiting all costs ${gbp(open.length * charges.share_deal_online)} in dealing (${open.length} × £${charges.share_deal_online.toFixed(2)}).` : ''))
-            : `No holdings under ${pct(rules.minPosition)}.`
+            : `No holdings under the ${pct(rules.minPosition)} minimum.`
     });
     document.getElementById('reviewFlags').innerHTML = flags.map(f => `
         <div class="review-flag ${f.level}">
@@ -1461,8 +1461,8 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
 
 
     // Minimum trade: below this a deal is not worth its dealing charge.
-    const minTrade = accountTotal * rules.minTrade / 100;
-    const tradeNote = ` Trades under ${gbp(minTrade)} (${pct(rules.minTrade)} of the account, min trade rule) are not proposed.`;
+    const minTrade = accountTotal * rules.minPosition / 100;
+    const tradeNote = ` The ${pct(rules.minPosition)} minimum (${gbp(minTrade)} of the account) is both the smallest holding worth owning and the smallest trade proposed.`;
 
     // Working copy of the portfolio
     const work = holdings.map(h => ({ name: h.name, sector: h.sector, value: h.value }));
@@ -1483,7 +1483,7 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
 
     // 2b. Answered small positions. Speculative ones are left alone entirely;
     // exits release cash into the pool; top-ups are filled after the reserve.
-    const answered = smallPositionStances(holdings, rules, bench);
+    const answered = smallPositionStances(holdings, rules, bench, accountTotal);
     const wantTopUp = [];
     answered.forEach(a => {
         const h = work.find(w => w.name === a.name);
@@ -1491,7 +1491,7 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
         if (a.choice === 'exit') {
             if (h.value < minTrade) {
                 actions.push({ kind: 'Decide', name: h.name, amount: h.value,
-                    why: `Marked exit, but ${gbp(h.value)} is under the ${gbp(minTrade)} min trade: the ${charges ? '£' + charges.share_deal_online.toFixed(2) : 'dealing'} charge is ${charges ? pct(charges.share_deal_online / h.value * 100) : 'a large share'} of it. Sell anyway, or leave it as a speculative position.` });
+                    why: `Marked exit, but ${gbp(h.value)} is under the ${gbp(minTrade)} minimum: the ${charges ? '£' + charges.share_deal_online.toFixed(2) : 'dealing'} charge is ${charges ? pct(charges.share_deal_online / h.value * 100) : 'a large share'} of it. Sell anyway, or leave it as a speculative position.` });
                 return;
             }
             actions.push({ kind: 'Sell', name: h.name, amount: h.value,
@@ -1517,11 +1517,11 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
     // 2c. Top-ups to the minimum position, in the order the holdings appear.
     const unallocatedSpent = { value: 0 };
     wantTopUp.forEach(({ h, a }) => {
-        const target = invested * rules.minPosition / 100;
+        const target = minTrade;   // top up to the minimum holding size
         const amount = Math.min(Math.max(0, target - h.value), poolAfterReserve - unallocatedSpent.value);
         if (amount < minTrade) {
             actions.push({ kind: 'Decide', name: h.name, amount: Math.max(0, target - h.value),
-                why: `Marked top up, but ${gbp(Math.max(0, target - h.value))} is under the ${gbp(minTrade)} min trade${poolAfterReserve - unallocatedSpent.value < minTrade ? ' or the cash is spent' : ''}. Add more, or leave it as a speculative position.` });
+                why: `Marked top up, but ${gbp(Math.max(0, target - h.value))} is under the ${gbp(minTrade)} minimum${poolAfterReserve - unallocatedSpent.value < minTrade ? ' or the cash is spent' : ''}. Add more, or leave it as a speculative position.` });
             return;
         }
         actions.push({ kind: 'Buy', name: h.name, amount,
@@ -1554,7 +1554,7 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
             gaps.sort((a, b) => b.need - a.need).forEach(g => {
                 let remaining = g.need * scale;
                 const gapPts = (g.b - g.curPts).toFixed(1);
-                const minValue = investedTarget * rules.minPosition / 100;
+                const minValue = minTrade;
                 // Sub-minimum holdings in an under-index sector are filled first, to the
                 // minimum: this closes the gap and removes a too-small position at once.
                 const smallHere = work.filter(h => h.sector === g.name && !h.name.startsWith('New: ') && h.value < minValue)
@@ -1586,9 +1586,9 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
                     h.value += amount; remaining -= amount; unallocated -= amount;
                 }
                 let n = 1;
-                while (remaining >= Math.max(minValue, minTrade)) {   // a new position below the minimum is not opened; remainder stays as cash
+                while (remaining >= minValue) {   // a new position below the minimum is not opened; remainder stays as cash
                     const amount = Math.min(remaining, headroom(0));
-                    if (amount < Math.max(minValue, minTrade)) break;
+                    if (amount < minValue) break;
                     const label = `New: ${g.name}${n > 1 ? ' #' + n : ''}`;
                     actions.push({ kind: 'Buy', name: `${g.name} → new position${n > 1 ? ' #' + n : ''}`, amount,
                         why: existing.length
@@ -1601,7 +1601,7 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
         }
     }
     if (unallocated > 1) actions.push({ kind: 'Keep as cash', name: 'Unallocated', amount: unallocated,
-        why: bench ? `Left after closing every sector gap more than ${rules.sectorBand} pts under the index, and after dropping trades under ${gbp(minTrade)}. Above the reserve; deploy at your discretion or raise the reserve.`
+        why: bench ? `Left after closing every sector gap more than ${rules.sectorBand} pts under the index, and after dropping trades under the ${gbp(minTrade)} minimum. Above the reserve; deploy at your discretion or raise the reserve.`
                    : 'Benchmark data unavailable, so no sector allocation was made.' });
 
     if (speculative.length) {
@@ -1618,12 +1618,12 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
     // one summary row. Exit or top-up is a judgement the rules cannot make.
     const small = answered.filter(h => !h.choice && !toppedUp.has(h.name));
     if (small.length) {
-        const topUp = small.reduce((s, h) => s + (invested * rules.minPosition / 100 - h.value), 0);
+        const topUp = small.reduce((s, h) => s + (accountTotal * rules.minPosition / 100 - h.value), 0);
         const release = small.reduce((s, h) => s + h.value, 0);
         const exits = small.filter(h => h.stance === 'Exit');
         const exitRelease = exits.reduce((s, h) => s + h.value, 0);
         const deal = n => charges ? `, dealing ${gbp(n * charges.share_deal_online)}` : '';
-        actions.push({ kind: 'Decide', name: `${small.length} holdings under ${pct(rules.minPosition)} not yet answered`, amount: topUp,
+        actions.push({ kind: 'Decide', name: `${small.length} holdings under the ${pct(rules.minPosition)} minimum, not yet answered`, amount: topUp,
             why: `Answer each in the Small positions table (speculative, top up or exit). Top up all to the minimum for ${gbp(topUp)}, or exit all and release ${gbp(release)}${deal(small.length)}. ` +
                  (bench ? `${exits.length} are in sectors at or over ${bench.name} (exit candidates, ${gbp(exitRelease)}${deal(exits.length)}). ` : '') +
                  `Per-holding figures in the Small positions table. Not included in the after-plan figures.` });
@@ -2202,7 +2202,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             createPortfolioReview();
         }
     });
-    ['ruleMaxPosition', 'ruleMinPosition', 'ruleSectorBand', 'ruleCashTarget', 'ruleMinTrade'].forEach(id => {
+    ['ruleMaxPosition', 'ruleMinPosition', 'ruleSectorBand', 'ruleCashTarget'].forEach(id => {
         document.getElementById(id).addEventListener('input', () => {
             if (portfolioData.length > 0) createPortfolioReview();
         });
