@@ -1360,19 +1360,14 @@ function renderSummaryStrip() {
     }
 }
 
-// Section behaviour: remembered open state, tile-to-section jumps, and
-// map resize when a hidden container becomes visible.
-const OPEN_STATE_PREFIX = 'pensEval.open.';
+// Section behaviour: tile-to-section jumps and map resize when a hidden
+// container becomes visible. Nothing is remembered between loads.
 function initSections() {
     const refreshVisuals = () => setTimeout(() => {
         if (window.map && window.map.invalidateSize) window.map.invalidateSize();
     }, 60);
     document.querySelectorAll('details.section').forEach(d => {
-        try { if (localStorage.getItem(OPEN_STATE_PREFIX + d.id) === '1') d.open = true; } catch (e) { /* ignore */ }
-        d.addEventListener('toggle', () => {
-            try { localStorage.setItem(OPEN_STATE_PREFIX + d.id, d.open ? '1' : '0'); } catch (e) { /* ignore */ }
-            if (d.open) refreshVisuals();
-        });
+        d.addEventListener('toggle', () => { if (d.open) refreshVisuals(); });
     });
     document.querySelectorAll('details.sub').forEach(d => d.addEventListener('toggle', () => { if (d.open) refreshVisuals(); }));
     document.querySelectorAll('.sum-tile[data-target]').forEach(btn => {
@@ -1589,8 +1584,6 @@ function buildRebalancePlan({ holdings, invested, totalCash, accountTotal, rules
 // from the account snapshot, the user's annual withdrawal and the latest ONS
 // CPI print. Arithmetic on real inputs only; no return assumptions.
 // ---------------------------------------------------------------------------
-const WITHDRAWAL_STORAGE_KEY = 'pensEval.annualWithdrawal';
-const AGE_BAND_STORAGE_KEY = 'pensEval.ageBand';
 
 function readDrawdownRules() {
     const num = (id, fallback) => {
@@ -2149,24 +2142,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (portfolioData.length > 0) createPortfolioReview();
         });
     });
-    // Drawdown inputs. Annual withdrawal is remembered in this browser only.
-    try {
-        const saved = localStorage.getItem(WITHDRAWAL_STORAGE_KEY);
-        if (saved) document.getElementById('ddAnnualWithdrawal').value = saved;
-    } catch (e) { /* storage unavailable; input starts empty */ }
-    try {
-        const savedAge = localStorage.getItem(AGE_BAND_STORAGE_KEY);
-        if (savedAge) document.getElementById('ddAgeBand').value = savedAge;
-    } catch (e) { /* ignore */ }
+    // Drawdown inputs. Entered each session; nothing is stored.
     document.getElementById('ddAgeBand').addEventListener('change', () => {
-        try { localStorage.setItem(AGE_BAND_STORAGE_KEY, document.getElementById('ddAgeBand').value); } catch (e) { /* ignore */ }
         if (portfolioData.length > 0) { createDrawdownReview(); createPortfolioReview(); }
     });
     ['ddAnnualWithdrawal', 'ddRateCeiling', 'ddRunwayFloor'].forEach(id => {
         document.getElementById(id).addEventListener('input', () => {
-            if (id === 'ddAnnualWithdrawal') {
-                try { localStorage.setItem(WITHDRAWAL_STORAGE_KEY, document.getElementById(id).value); } catch (e) { /* ignore */ }
-            }
             if (portfolioData.length > 0) { createDrawdownReview(); createPortfolioReview(); }
         });
     });

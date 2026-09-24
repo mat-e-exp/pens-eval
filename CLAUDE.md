@@ -8,7 +8,7 @@ Personal tool, not for commercial use (narrow market, strong free competition). 
 
 The page is a snapshot of one uploaded HL export. Nothing from an uploaded file is kept, recorded or documented. The GitHub repo is public.
 
-- **Upload is in memory only.** No CSV-derived data is written to disk, browser storage, the server, logs or any file. `localStorage` holds only UI state and user-typed inputs (section open state, age band, annual withdrawal).
+- **Nothing is kept.** The page is ephemeral: one evaluation, then gone. No writes to disk, browser storage (no `localStorage`/`sessionStorage`/cookies), the server, logs or any file. Every input (withdrawal, age band, rules) is entered fresh each load.
 - **Nothing real in tracked files.** Code, comments, docs, commit messages and Claude memory contain no facts from a real portfolio: no values, cash balances, holding counts, weights, holding lines or export dates. Examples use neutral figures (`12,345.67`) or `data/test/`.
 - **Third parties get ticker symbols only**, never amounts or quantities.
 - **No feature may need saved exports.** Anything that depends on history is out of scope.
@@ -50,12 +50,12 @@ Real data or no data. The page informs financial decisions.
 
 **UK Inflation (Drawdown Sustainability section)**
 - ✅ ONS time series D7G7 (CPI annual rate, all items) via `ONS_CPI_URL` in script.js. Public JSON, CORS-enabled, no key. Latest monthly print only.
-- ✅ Annual withdrawal is user input (not in the HL CSV); stored in localStorage for convenience.
+- ✅ Annual withdrawal is user input (not in the HL CSV); entered each session, never stored.
 - ❌ No return forecasts or projections. Section is arithmetic on snapshot + input + CPI only.
 
 **Peer Distributions (Drawdown Sustainability → Peer comparison)**
 - ✅ `data/peer-benchmarks.json`: FCA Retirement income market data (Tables 3, 7, 8; plans, not people) and ONS Wealth and Assets Survey Table 6.9 (pension wealth in payment, P25/median/P75 by age; includes DB as capital). Transcribed from the published xlsx files named in the JSON; `period`/`published`/`source` per block.
-- ✅ Age band is user input, stored in localStorage. Never inferred.
+- ✅ Age band is user input, entered each session, never stored. Never inferred.
 - ❌ Bands only. Never interpolate an exact percentile. No secondary-site figures (they conflict with the primary tables).
 
 **Dealing Charges (Portfolio Review, Rebalance Plan)**

@@ -56,7 +56,6 @@ A portfolio of self-picked stocks is not a fund, so no league table has an entry
 
 ## Known debt
 
-- **Benchmark selection is not remembered** and resets to MSCI World on reload. Composition comparison against a global index is weak for a mostly US-listed portfolio.
 - **No browser-level testing.** Every change this session was verified headlessly in node. Layout and chart rendering are unverified.
 
 - **Local real-data files still supported.** The `data/live/` file picker, `scan-files.py` (writes real filenames to `file-list.json`) and `data/holdings-map.json` (lists real holdings) conflict with Data Handling. Removal pending a decision on how sectors are classified without the holdings map.
