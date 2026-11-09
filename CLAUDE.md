@@ -1,6 +1,6 @@
 # Pension Evaluation Dashboard
 
-Personal tool, not for commercial use (narrow market, strong free competition). Browser dashboard for one uploaded Hargreaves Lansdown SIPP account-summary CSV: static HTML/JS (`index.html`, `script.js`, `styles.css`) served by `server.py` on port 3020. Behaviour: `README.md`. Ideas and deferred work: `ROADMAP.md`.
+Personal tool, not for commercial use (narrow market, strong free competition). Browser dashboard for one uploaded Hargreaves Lansdown SIPP account-summary CSV: static HTML/JS (`index.html`, `script.js`, `styles.css`) served by `server.py` on port 3020. Behaviour: `README.md`. Ideas and deferred work: `ROADMAP.md`. Current state: `STATUS.md`.
 
 ---
 
